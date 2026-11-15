@@ -1,0 +1,13 @@
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+Packaged/
+Build/
+.vs/
+.idea/
+*.sln
+*.VC.db
+*.VC.opendb
+*.DotSettings.user
+.mcp.json
