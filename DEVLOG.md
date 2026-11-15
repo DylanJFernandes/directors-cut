@@ -311,3 +311,15 @@ Added only after the ten must-work items passed their checks.
 - Engine content used: UE 5.9 Third Person template (mannequins, `ABP_Unarmed`, input
   and level prototyping packs) and engine basic shapes.
 - No third-party assets.
+
+## 18:15 — A git hiccup worth knowing about
+
+Merging the feature branch into `main` was first attempted **while the editor was
+open**. Git could not remove `Lvl_Backlot.umap` and `M_GreyboxGlow.uasset` when switching
+to `main` (the editor had them open), left them behind as untracked files, and then
+refused the merge because it would overwrite them. Nothing was lost: both files were
+checked byte-for-byte (SHA-256) against the committed versions, the editor was closed,
+the two duplicates were removed, and the merge then went through.
+
+**Lesson for the rest of the jam: close the editor before switching branches or
+merging**, or stay on one branch while it is open.
