@@ -744,9 +744,10 @@ void AGuardCharacter::ReceiveGrapplePull(
 	const float FlightSeconds{2.0f
 		* GuardConstants::GrapplePullUpwardSpeed
 		/ FMath::Abs(GetWorld()->GetGravityZ())};
-	const float HorizontalSpeed{static_cast<float>(
-		ToPuller.Size2D()) * GuardConstants::GrapplePullLandingFraction
-		/ FlightSeconds};
+	const float LandingDistance{
+		static_cast<float>(ToPuller.Size2D())
+		* GuardConstants::GrapplePullLandingFraction};
+	const float HorizontalSpeed{LandingDistance / FlightSeconds};
 	GetMesh()->AddImpulse(
 		ToPuller.GetSafeNormal2D() * HorizontalSpeed
 		+ FVector{0.0f, 0.0f,
