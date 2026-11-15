@@ -16,6 +16,7 @@ public class DirectorsCut : ModuleRules
 			"EnhancedInput",
 			"AIModule",
 			"NavigationSystem",
+			"DeveloperSettings",
 			"UMG",
 			"Slate",
 			"SlateCore"
