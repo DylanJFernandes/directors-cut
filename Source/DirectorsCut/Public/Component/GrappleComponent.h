@@ -6,6 +6,7 @@
 
 class ACharacter;
 class AGrappleHookPoint;
+class AGuardCharacter;
 
 /* The film reel grapple. Every frame it picks the hook point
    closest to the center of the screen, and on request it flies
@@ -25,6 +26,14 @@ public:
 
 	/* Stops an active grapple and lets the owner fall */
 	void CancelGrapple();
+
+	/* Reels in the stunned guard the owner is aiming at and
+	   knocks him out. Returns false when there is none. */
+	bool TryPullStunnedGuard();
+
+	/* Returns the stunned guard the owner is aiming at and
+	   could reel in, if any */
+	AGuardCharacter* FindPullableGuard() const;
 
 	/* Returns the hook point E would grapple to, if any */
 	AGrappleHookPoint* GetTargetedHookPoint() const;
@@ -56,6 +65,12 @@ private:
 	   point cannot be grappled */
 	float GetAimAngleToHookPoint(
 		const AGrappleHookPoint& HookPoint,
+		const FVector& ViewLocation,
+		const FVector& ViewDirection) const;
+
+	/* Returns the angle in degrees between the view direction
+	   and a location */
+	float GetAimAngleToLocation(const FVector& Location,
 		const FVector& ViewLocation,
 		const FVector& ViewDirection) const;
 

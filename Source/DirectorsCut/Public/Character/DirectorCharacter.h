@@ -4,6 +4,7 @@
 #include "GameFramework/Character.h"
 #include "DirectorCharacter.generated.h"
 
+class ACameraRigTurret;
 class UBeamMeshComponent;
 class UCameraComponent;
 class UCameraFlashComponent;
@@ -11,6 +12,7 @@ class UDirectorHealthComponent;
 class UGrappleComponent;
 class UInputAction;
 class UInputMappingContext;
+class UMegaphoneComponent;
 class UPointLightComponent;
 class USpringArmComponent;
 class UTakedownComponent;
@@ -45,6 +47,12 @@ public:
 
 	/* Returns the clapperboard takedown component */
 	UTakedownComponent* GetTakedownComponent() const;
+
+	/* Returns the megaphone component */
+	UMegaphoneComponent* GetMegaphoneComponent() const;
+
+	/* Returns whether the director is on a camera rig */
+	bool IsMountedOnCameraRig() const;
 
 protected:
 	/* Applies tuning values and binds the health delegate */
@@ -105,9 +113,30 @@ private:
 	/* Toggles crouching */
 	void HandleCrouchPressed();
 
-	/* Starts the upload when next to the terminal, otherwise
-	   launches the film reel grapple */
+	/* Starts the upload when next to the terminal, reels in a
+	   stunned guard when aiming at one, otherwise launches the
+	   film reel grapple */
 	void HandleInteractPressed();
+
+	/* Throws a noise to the aimed spot with the megaphone */
+	void HandleMegaphonePressed();
+
+	/* Fires the camera rig's spotlight while mounted */
+	void HandleFirePressed();
+
+	/* Reels in the stunned guard being aimed at. Returns
+	   whether a guard was reeled in. */
+	bool TryReelInStunnedGuard();
+
+	/* Climbs onto a camera rig in reach. Returns whether the
+	   director mounted one. */
+	bool TryMountCameraRig();
+
+	/* Climbs off the camera rig */
+	void DismountCameraRig();
+
+	/* Climbs off if something knocked the director away */
+	void DismountIfKnockedOffCameraRig();
 
 	/* Fires the camera flash */
 	void HandleFlashPressed();
@@ -160,6 +189,10 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Custom|Components")
 	TObjectPtr<UTakedownComponent> Takedown;
 
+	/* Megaphone */
+	UPROPERTY(VisibleAnywhere, Category = "Custom|Components")
+	TObjectPtr<UMegaphoneComponent> Megaphone;
+
 	// Input
 	/* Mapping context holding every key binding */
 	UPROPERTY()
@@ -192,6 +225,17 @@ private:
 	/* Clapperboard takedown on F */
 	UPROPERTY()
 	TObjectPtr<UInputAction> TakedownAction;
+
+	/* Megaphone on G */
+	UPROPERTY()
+	TObjectPtr<UInputAction> MegaphoneAction;
+
+	/* Camera rig spotlight on the left mouse button */
+	UPROPERTY()
+	TObjectPtr<UInputAction> FireAction;
+
+	/* Camera rig the director is standing on, if any */
+	TWeakObjectPtr<ACameraRigTurret> MountedCameraRig;
 
 	/* Timer that switches the flash light off */
 	FTimerHandle FlashLightTimerHandle;

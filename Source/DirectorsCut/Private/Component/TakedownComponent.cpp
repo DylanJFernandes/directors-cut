@@ -4,7 +4,9 @@
 #include "Data/BacklotTuningSettings.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
+#include "Kismet/GameplayStatics.h"
 #include "Player/DirectorPlayerController.h"
+#include "TimerManager.h"
 #include "UI/HUD/BacklotHUD.h"
 
 namespace TakedownConstants
@@ -133,9 +135,35 @@ void UTakedownComponent::PerformTakedown(
 			* TakedownConstants::DropOntoGuardSpeed, true, true);
 	}
 	Guard->ReceiveTakedown();
+	PlayCutFeedback(GuardLocation);
+}
+
+void UTakedownComponent::PlayCutFeedback(
+	const FVector& CutLocation)
+{
 	ShowPopup(TEXT("CUT!"),
-		GuardLocation + FVector{0.0f, 0.0f, 120.0f},
+		CutLocation + FVector{0.0f, 0.0f, 120.0f},
 		FLinearColor{1.0f, 0.9f, 0.2f});
+	StartDramaticCut();
+}
+
+void UTakedownComponent::StartDramaticCut()
+{
+	const UBacklotTuningSettings& Tuning{
+		UBacklotTuningSettings::Get()};
+	const float TimeDilation{FMath::Clamp(
+		Tuning.TakedownSlowMotionTimeDilation, 0.05f, 1.0f)};
+	UGameplayStatics::SetGlobalTimeDilation(this, TimeDilation);
+	const float DilatedSeconds{FMath::Max(0.01f,
+		Tuning.TakedownSlowMotionSeconds * TimeDilation)};
+	GetWorld()->GetTimerManager().SetTimer(
+		DramaticCutTimerHandle, this,
+		&UTakedownComponent::EndDramaticCut, DilatedSeconds);
+}
+
+void UTakedownComponent::EndDramaticCut()
+{
+	UGameplayStatics::SetGlobalTimeDilation(this, 1.0f);
 }
 
 void UTakedownComponent::FailTakedown(AGuardCharacter& Guard)

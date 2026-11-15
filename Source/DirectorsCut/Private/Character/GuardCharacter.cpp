@@ -58,6 +58,13 @@ namespace GuardConstants
 	constexpr float LaserAimThickness{3.0f};
 	constexpr float LaserFireThickness{12.0f};
 
+	/* Upward speed of a guard being reeled in */
+	constexpr float GrapplePullUpwardSpeed{380.0f};
+
+	/* Fraction of the way to the director a reeled-in guard
+	   flies before landing */
+	constexpr float GrapplePullLandingFraction{0.8f};
+
 	/* Seconds a knocked-out guard stays in the level */
 	constexpr float KnockedOutBodySeconds{20.0f};
 
@@ -723,6 +730,28 @@ void AGuardCharacter::ReceiveTakedown()
 	GetMesh()->SetCollisionProfileName(TEXT("Ragdoll"));
 	GetMesh()->SetSimulatePhysics(true);
 	SetLifeSpan(GuardConstants::KnockedOutBodySeconds);
+}
+
+void AGuardCharacter::ReceiveGrapplePull(
+	const FVector& PullerLocation)
+{
+	if (CurrentState == EGuardState::TakenDown)
+	{
+		return;
+	}
+	ReceiveTakedown();
+	const FVector ToPuller{PullerLocation - GetActorLocation()};
+	const float FlightSeconds{2.0f
+		* GuardConstants::GrapplePullUpwardSpeed
+		/ FMath::Abs(GetWorld()->GetGravityZ())};
+	const float HorizontalSpeed{static_cast<float>(
+		ToPuller.Size2D()) * GuardConstants::GrapplePullLandingFraction
+		/ FlightSeconds};
+	GetMesh()->AddImpulse(
+		ToPuller.GetSafeNormal2D() * HorizontalSpeed
+		+ FVector{0.0f, 0.0f,
+			GuardConstants::GrapplePullUpwardSpeed},
+		NAME_None, true);
 }
 
 void AGuardCharacter::BecomeAlert(

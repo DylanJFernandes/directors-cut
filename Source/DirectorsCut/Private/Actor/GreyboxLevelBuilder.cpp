@@ -1,5 +1,6 @@
 #include "Actor/GreyboxLevelBuilder.h"
 
+#include "Actor/CameraRigTurret.h"
 #include "Actor/GrappleHookPoint.h"
 #include "Actor/UploadTerminal.h"
 #include "Actor/ZoneCheckpoint.h"
@@ -158,6 +159,8 @@ void AGreyboxLevelBuilder::BuildNewYorkStreet()
 		FVector{100.0f, 1200.0f, 450.0f}, Hazard);
 	AddSign(TEXT("ROAD CLOSED - GRAPPLE UP  [E]"),
 		FVector{990.0f, 0.0f, 520.0f}, 70.0f);
+	AddSign(TEXT("Q: FLASH THEM   F: CUT!"),
+		FVector{1700.0f, 0.0f, 620.0f}, 70.0f);
 	AddBox(FVector{2300.0f, -80.0f, 0.0f},
 		FVector{160.0f, 160.0f, 130.0f}, Crate);
 	AddBox(FVector{3000.0f, -560.0f, 0.0f},
@@ -253,6 +256,8 @@ void AGreyboxLevelBuilder::BuildWesternSet()
 	AddGuard({FVector2D{11050.0f, -700.0f},
 		FVector2D{11050.0f, 700.0f}});
 
+	AddSign(TEXT("STAY HIGH - DROP ON THEM WITH F"),
+		FVector{5650.0f, 0.0f, 520.0f}, 70.0f);
 	AddCheckpoint(TEXT("Western Set"),
 		FVector2D{WesternStartX + 150.0f, 0.0f},
 		FVector{100.0f, LevelHalfWidth, 400.0f});
@@ -367,6 +372,8 @@ void AGreyboxLevelBuilder::BuildSoundstage()
 		FVector2D{14900.0f, 300.0f}, FVector2D{14900.0f, -300.0f},
 		FVector2D{13000.0f, -300.0f}});
 
+	AddSign(TEXT("QUIET ON SET - USE THE CATWALK"),
+		FVector{12000.0f, 0.0f, 1050.0f}, 70.0f);
 	AddCheckpoint(TEXT("Soundstage"),
 		FVector2D{SoundstageStartX + 250.0f, 0.0f},
 		FVector{80.0f, 400.0f, 300.0f});
@@ -466,6 +473,11 @@ void AGreyboxLevelBuilder::BuildEditingBay()
 		GetActorTransform().TransformPosition(FVector{
 			LevelEndX - 150.0f, 0.0f, CharacterSpawnHeight})});
 
+	GetWorld()->SpawnActor<ACameraRigTurret>(
+		GetActorTransform().TransformPosition(
+			FVector{17620.0f, 0.0f, 75.0f}), GetActorRotation());
+	AddSign(TEXT("START THE UPLOAD AND STAY CLOSE"),
+		FVector{17600.0f, 0.0f, 420.0f}, 60.0f);
 	AddCheckpoint(TEXT("Editing Bay"),
 		FVector2D{EditingBayStartX + 250.0f, 0.0f},
 		FVector{80.0f, 400.0f, 300.0f});

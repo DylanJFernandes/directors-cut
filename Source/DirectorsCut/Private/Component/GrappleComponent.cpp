@@ -1,6 +1,7 @@
 #include "Component/GrappleComponent.h"
 
 #include "Actor/GrappleHookPoint.h"
+#include "Character/GuardCharacter.h"
 #include "Data/BacklotTuningSettings.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -117,10 +118,18 @@ float UGrappleComponent::GetAimAngleToHookPoint(
 	{
 		return NotGrappleable;
 	}
-	const FVector DirectionToHook{
-		(HookLocation - ViewLocation).GetSafeNormal()};
+	return GetAimAngleToLocation(HookLocation, ViewLocation,
+		ViewDirection);
+}
+
+float UGrappleComponent::GetAimAngleToLocation(
+	const FVector& Location, const FVector& ViewLocation,
+	const FVector& ViewDirection) const
+{
+	const FVector DirectionToLocation{
+		(Location - ViewLocation).GetSafeNormal()};
 	const float AimDot{static_cast<float>(
-		FVector::DotProduct(ViewDirection, DirectionToHook))};
+		FVector::DotProduct(ViewDirection, DirectionToLocation))};
 	return FMath::RadiansToDegrees(
 		FMath::Acos(FMath::Clamp(AimDot, -1.0f, 1.0f)));
 }
@@ -227,6 +236,54 @@ void UGrappleComponent::CancelGrapple()
 	DestinationHookPoint.Reset();
 	CachedOwnerCharacter->GetCharacterMovement()
 		->SetMovementMode(MOVE_Falling);
+}
+
+bool UGrappleComponent::TryPullStunnedGuard()
+{
+	AGuardCharacter* Guard{FindPullableGuard()};
+	if (!Guard)
+	{
+		return false;
+	}
+	Guard->ReceiveGrapplePull(GetOwner()->GetActorLocation());
+	return true;
+}
+
+AGuardCharacter* UGrappleComponent::FindPullableGuard() const
+{
+	if (!CachedOwnerCharacter.IsValid()
+		|| !CachedOwnerCharacter->GetController())
+	{
+		return nullptr;
+	}
+	const UBacklotTuningSettings& Tuning{
+		UBacklotTuningSettings::Get()};
+	FVector ViewLocation;
+	FRotator ViewRotation;
+	CachedOwnerCharacter->GetController()->GetPlayerViewPoint(
+		ViewLocation, ViewRotation);
+
+	AGuardCharacter* BestGuard{nullptr};
+	float BestAimAngle{Tuning.GrapplePullAimConeHalfAngleDegrees};
+	for (TActorIterator<AGuardCharacter> GuardIterator{GetWorld()};
+		GuardIterator; ++GuardIterator)
+	{
+		const FVector GuardLocation{
+			GuardIterator->GetActorLocation()};
+		const bool bIsInRange{FVector::Dist(GuardLocation,
+			GetOwner()->GetActorLocation())
+			<= Tuning.GrapplePullRange};
+		const float AimAngle{GetAimAngleToLocation(GuardLocation,
+			ViewLocation, ViewRotation.Vector())};
+		if (GuardIterator->IsStunned() && bIsInRange
+			&& AimAngle < BestAimAngle
+			&& HasLineOfSight(ViewLocation, GuardLocation))
+		{
+			BestAimAngle = AimAngle;
+			BestGuard = *GuardIterator;
+		}
+	}
+	return BestGuard;
 }
 
 AGrappleHookPoint* UGrappleComponent::GetTargetedHookPoint() const

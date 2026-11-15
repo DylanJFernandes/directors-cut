@@ -1,5 +1,6 @@
 #include "UI/HUD/BacklotHUD.h"
 
+#include "Actor/CameraRigTurret.h"
 #include "Actor/GrappleHookPoint.h"
 #include "Actor/UploadTerminal.h"
 #include "Character/DirectorCharacter.h"
@@ -7,6 +8,7 @@
 #include "Component/CameraFlashComponent.h"
 #include "Component/DirectorHealthComponent.h"
 #include "Component/GrappleComponent.h"
+#include "Component/MegaphoneComponent.h"
 #include "Component/TakedownComponent.h"
 #include "CanvasItem.h"
 #include "Engine/Canvas.h"
@@ -49,6 +51,9 @@ namespace BacklotHUDConstants
 		TEXT("Q  Camera flash (stuns guards in front)"),
 		TEXT("F  Clapperboard takedown (stunned,"),
 		TEXT("    unaware from behind, or from above)"),
+		TEXT("E on a stunned guard  Reel him in"),
+		TEXT("G  Megaphone (lures guards to where you aim)"),
+		TEXT("Guard shots: sidestep when the laser turns red"),
 		TEXT("F1  Toggle guard vision cones")};
 
 	/* Returns the label shown above a guard for its state */
@@ -86,24 +91,28 @@ void ABacklotHUD::DrawHUD()
 	{
 		return;
 	}
+	if (GameState->IsGameWon())
+	{
+		DrawWinScreen();
+		return;
+	}
 	DrawGuardMeters();
 	DrawGrappleMarker(*Director);
+	DrawReelInPrompt(*Director);
 	DrawTakedownPrompt(*Director);
 	DrawWorldPopups();
 	DrawScreenFlashes(*Director);
 	DrawHealth(*Director);
 	DrawFlashCooldown(*Director);
+	DrawMegaphoneCooldown(*Director);
 	DrawZoneName(*GameState);
 	DrawUpload(*GameState, *Director);
+	DrawCameraRigPrompt(*Director);
 	DrawCrosshair();
 	DrawCenterMessage();
 	if (GameState->IsControlsHelpVisible())
 	{
 		DrawControlsHelp();
-	}
-	if (GameState->IsGameWon())
-	{
-		DrawWinScreen();
 	}
 }
 
@@ -177,6 +186,21 @@ void ABacklotHUD::DrawGrappleMarker(
 	DrawCenteredLabel(TEXT("[E] GRAPPLE"),
 		ScreenPosition + FVector2D{0.0f, HalfSize + 14.0f},
 		MarkerColor, 1.2f);
+}
+
+void ABacklotHUD::DrawReelInPrompt(
+	const ADirectorCharacter& Director)
+{
+	const AGuardCharacter* Guard{
+		Director.GetGrappleComponent()->FindPullableGuard()};
+	FVector2D ScreenPosition;
+	if (!Guard || !ProjectToScreen(Guard->GetActorLocation()
+		+ FVector{0.0f, 0.0f, 60.0f}, ScreenPosition))
+	{
+		return;
+	}
+	DrawCenteredLabel(TEXT("[E] REEL HIM IN"), ScreenPosition,
+		BacklotHUDConstants::WarnColor, 1.6f);
 }
 
 void ABacklotHUD::DrawTakedownPrompt(
@@ -263,6 +287,24 @@ void ABacklotHUD::DrawFlashCooldown(
 		bIsReady ? GoodColor : WarnColor);
 }
 
+void ABacklotHUD::DrawMegaphoneCooldown(
+	const ADirectorCharacter& Director)
+{
+	using namespace BacklotHUDConstants;
+	const float CooldownRemaining{
+		Director.GetMegaphoneComponent()
+			->GetCooldownFractionRemaining()};
+	const bool bIsReady{CooldownRemaining <= 0.0f};
+	const FVector2D LabelPosition{
+		ScreenMargin, ScreenMargin + 104.0f};
+	DrawLabel(bIsReady ? TEXT("MEGAPHONE [G]  READY")
+		: TEXT("MEGAPHONE [G]  recharging"),
+		LabelPosition, bIsReady ? GoodColor : TextColor, 1.2f);
+	DrawBar(LabelPosition + FVector2D{0.0f, 24.0f},
+		FVector2D{154.0f, 12.0f}, 1.0f - CooldownRemaining,
+		bIsReady ? GoodColor : WarnColor);
+}
+
 void ABacklotHUD::DrawScreenFlashes(
 	const ADirectorCharacter& Director)
 {
@@ -328,6 +370,31 @@ void ABacklotHUD::DrawUpload(const ABacklotGameState& GameState,
 			DrawCenteredLabel(TEXT("[E] START THE UPLOAD"),
 				FVector2D{Canvas->SizeX * 0.5f,
 					Canvas->SizeY * 0.62f}, GoodColor, 2.2f);
+		}
+	}
+}
+
+void ABacklotHUD::DrawCameraRigPrompt(
+	const ADirectorCharacter& Director)
+{
+	using namespace BacklotHUDConstants;
+	const FVector2D PromptCenter{
+		Canvas->SizeX * 0.5f, Canvas->SizeY * 0.72f};
+	if (Director.IsMountedOnCameraRig())
+	{
+		DrawCenteredLabel(TEXT("CAMERA RIG   Left mouse: "
+			"spotlight stun    E: get off"),
+			PromptCenter, WarnColor, 1.6f);
+		return;
+	}
+	for (TActorIterator<ACameraRigTurret> RigIterator{GetWorld()};
+		RigIterator; ++RigIterator)
+	{
+		if (RigIterator->CanBeMountedFrom(
+			Director.GetActorLocation()))
+		{
+			DrawCenteredLabel(TEXT("[E] MOUNT THE CAMERA RIG"),
+				PromptCenter, GoodColor, 1.8f);
 		}
 	}
 }

@@ -57,6 +57,9 @@ private:
 	/* Marks the hook point E would grapple to */
 	void DrawGrappleMarker(const ADirectorCharacter& Director);
 
+	/* Marks the stunned guard E would reel in */
+	void DrawReelInPrompt(const ADirectorCharacter& Director);
+
 	/* Shows the takedown prompt on the guard in reach */
 	void DrawTakedownPrompt(const ADirectorCharacter& Director);
 
@@ -70,6 +73,9 @@ private:
 	/* Draws the camera flash cooldown bar */
 	void DrawFlashCooldown(const ADirectorCharacter& Director);
 
+	/* Draws the megaphone cooldown bar */
+	void DrawMegaphoneCooldown(const ADirectorCharacter& Director);
+
 	/* Whites the screen out briefly after a flash and tints it
 	   red after a hit */
 	void DrawScreenFlashes(const ADirectorCharacter& Director);
@@ -80,6 +86,9 @@ private:
 	/* Draws the upload bar, or the prompt to start it */
 	void DrawUpload(const ABacklotGameState& GameState,
 		const ADirectorCharacter& Director);
+
+	/* Shows how to mount or use the camera rig */
+	void DrawCameraRigPrompt(const ADirectorCharacter& Director);
 
 	/* Lists the controls */
 	void DrawControlsHelp();

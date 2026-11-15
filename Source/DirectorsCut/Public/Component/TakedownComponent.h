@@ -40,6 +40,10 @@ public:
 	   would succeed */
 	FTakedownOpportunity FindTakedownOpportunity() const;
 
+	/* Shows the CUT! popup at a location and slows the game
+	   for a moment */
+	void PlayCutFeedback(const FVector& CutLocation);
+
 private:
 	/* Returns whether the guard is close enough on the ground */
 	bool IsGuardInGroundReach(const AGuardCharacter& Guard) const;
@@ -58,8 +62,17 @@ private:
 	/* Alerts the guard and throws the director back */
 	void FailTakedown(AGuardCharacter& Guard);
 
+	/* Slows the game for a moment to sell the takedown */
+	void StartDramaticCut();
+
+	/* Returns the game to normal speed */
+	void EndDramaticCut();
+
 	/* Shows a short text popup at a world location */
 	void ShowPopup(const FString& Text,
 		const FVector& WorldLocation,
 		const FLinearColor& Color) const;
+
+	/* Timer that ends the dramatic cut */
+	FTimerHandle DramaticCutTimerHandle;
 };

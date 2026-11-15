@@ -52,6 +52,9 @@ public:
 	/* Knocks the guard out for good */
 	void ReceiveTakedown();
 
+	/* Knocks the guard out and yanks him toward a location */
+	void ReceiveGrapplePull(const FVector& PullerLocation);
+
 	/* Puts the guard straight into chasing and shooting */
 	void BecomeAlert(const FVector& KnownPlayerLocation);
 

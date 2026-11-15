@@ -96,6 +96,15 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Grapple")
 	float GrappleExitUpwardSpeed;
 
+	/* Farthest stunned guard the film reel can reel in */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Grapple")
+	float GrapplePullRange;
+
+	/* A stunned guard must be this close to screen center, in
+	   degrees, to be reeled in */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Grapple")
+	float GrapplePullAimConeHalfAngleDegrees;
+
 	// Guard Movement
 	/* Guard walking speed while patrolling */
 	UPROPERTY(Config, EditAnywhere,
@@ -265,6 +274,15 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Takedown")
 	float FailedTakedownKnockbackSpeed;
 
+	/* Game speed during the dramatic cut after a takedown
+	   (1 = no slow motion) */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Takedown")
+	float TakedownSlowMotionTimeDilation;
+
+	/* Real seconds the dramatic cut lasts */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Takedown")
+	float TakedownSlowMotionSeconds;
+
 	// Megaphone
 	/* How far away the megaphone noise can be placed */
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Megaphone")
@@ -277,6 +295,24 @@ public:
 	/* Seconds before the megaphone can be used again */
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Megaphone")
 	float MegaphoneCooldownSeconds;
+
+	// Camera Rig
+	/* How far the camera rig's spotlight reaches */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Camera Rig")
+	float TurretRange;
+
+	/* A guard must be this close to screen center, in degrees,
+	   for the spotlight to hit him */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Camera Rig")
+	float TurretAimConeHalfAngleDegrees;
+
+	/* Seconds a guard hit by the spotlight stays stunned */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Camera Rig")
+	float TurretStunSeconds;
+
+	/* Seconds between spotlight shots */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Camera Rig")
+	float TurretFireIntervalSeconds;
 
 	// Upload
 	/* Seconds of uploading needed to win */

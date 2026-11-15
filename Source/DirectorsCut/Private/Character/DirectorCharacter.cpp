@@ -1,5 +1,8 @@
 #include "Character/DirectorCharacter.h"
 
+#include "Character/GuardCharacter.h"
+
+#include "Actor/CameraRigTurret.h"
 #include "Actor/UploadTerminal.h"
 #include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
@@ -7,6 +10,7 @@
 #include "Component/CameraFlashComponent.h"
 #include "Component/DirectorHealthComponent.h"
 #include "Component/GrappleComponent.h"
+#include "Component/MegaphoneComponent.h"
 #include "Component/TakedownComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/PointLightComponent.h"
@@ -24,7 +28,9 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
+#include "Player/DirectorPlayerController.h"
 #include "TimerManager.h"
+#include "UI/HUD/BacklotHUD.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace DirectorConstants
@@ -112,6 +118,8 @@ ADirectorCharacter::ADirectorCharacter()
 		TEXT("CameraFlash"));
 	Takedown = CreateDefaultSubobject<UTakedownComponent>(
 		TEXT("Takedown"));
+	Megaphone = CreateDefaultSubobject<UMegaphoneComponent>(
+		TEXT("Megaphone"));
 }
 
 void ADirectorCharacter::BeginPlay()
@@ -142,6 +150,17 @@ void ADirectorCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UpdateGrappleTether();
+	DismountIfKnockedOffCameraRig();
+}
+
+void ADirectorCharacter::DismountIfKnockedOffCameraRig()
+{
+	const bool bWasKnockedOff{MountedCameraRig.IsValid()
+		&& GetCharacterMovement()->MovementMode != MOVE_None};
+	if (bWasKnockedOff)
+	{
+		DismountCameraRig();
+	}
 }
 
 void ADirectorCharacter::UpdateGrappleTether()
@@ -186,6 +205,8 @@ void ADirectorCharacter::CreateInputActions()
 	InteractAction = CreateButtonAction(EKeys::E);
 	FlashAction = CreateButtonAction(EKeys::Q);
 	TakedownAction = CreateButtonAction(EKeys::F);
+	MegaphoneAction = CreateButtonAction(EKeys::G);
+	FireAction = CreateButtonAction(EKeys::LeftMouseButton);
 }
 
 UInputAction* ADirectorCharacter::CreateButtonAction(
@@ -255,6 +276,11 @@ void ADirectorCharacter::BindInputActions(
 	EnhancedInput->BindAction(TakedownAction,
 		ETriggerEvent::Started, this,
 		&ADirectorCharacter::HandleTakedownPressed);
+	EnhancedInput->BindAction(MegaphoneAction,
+		ETriggerEvent::Started, this,
+		&ADirectorCharacter::HandleMegaphonePressed);
+	EnhancedInput->BindAction(FireAction, ETriggerEvent::Started,
+		this, &ADirectorCharacter::HandleFirePressed);
 }
 
 void ADirectorCharacter::HandleMove(
@@ -300,11 +326,89 @@ void ADirectorCharacter::HandleCrouchPressed()
 
 void ADirectorCharacter::HandleInteractPressed()
 {
-	if (TryUseUploadTerminal())
+	if (MountedCameraRig.IsValid())
+	{
+		DismountCameraRig();
+		return;
+	}
+	if (TryUseUploadTerminal() || TryMountCameraRig()
+		|| TryReelInStunnedGuard())
 	{
 		return;
 	}
 	Grapple->TryStartGrapple();
+}
+
+bool ADirectorCharacter::TryReelInStunnedGuard()
+{
+	const AGuardCharacter* Guard{Grapple->FindPullableGuard()};
+	if (!Guard)
+	{
+		return false;
+	}
+	const FVector GuardLocation{Guard->GetActorLocation()};
+	Grapple->TryPullStunnedGuard();
+	Takedown->PlayCutFeedback(GuardLocation);
+	return true;
+}
+
+bool ADirectorCharacter::TryMountCameraRig()
+{
+	for (TActorIterator<ACameraRigTurret> RigIterator{GetWorld()};
+		RigIterator; ++RigIterator)
+	{
+		if (!RigIterator->CanBeMountedFrom(GetActorLocation()))
+		{
+			continue;
+		}
+		MountedCameraRig = *RigIterator;
+		Grapple->CancelGrapple();
+		UnCrouch();
+		SetActorLocation(RigIterator->GetSeatLocation());
+		GetCharacterMovement()->DisableMovement();
+		bUseControllerRotationYaw = true;
+		return true;
+	}
+	return false;
+}
+
+void ADirectorCharacter::DismountCameraRig()
+{
+	MountedCameraRig.Reset();
+	bUseControllerRotationYaw = false;
+	if (GetCharacterMovement()->MovementMode == MOVE_None)
+	{
+		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	}
+}
+
+void ADirectorCharacter::HandleFirePressed()
+{
+	if (!MountedCameraRig.IsValid() || !GetController())
+	{
+		return;
+	}
+	FVector ViewLocation;
+	FRotator ViewRotation;
+	GetController()->GetPlayerViewPoint(ViewLocation,
+		ViewRotation);
+	MountedCameraRig->TryFireSpotlight(ViewLocation,
+		ViewRotation.Vector());
+}
+
+void ADirectorCharacter::HandleMegaphonePressed()
+{
+	ADirectorPlayerController* DirectorController{
+		Cast<ADirectorPlayerController>(GetController())};
+	if (!Megaphone->TryMakeNoise() || !DirectorController
+		|| !DirectorController->GetBacklotHUD())
+	{
+		return;
+	}
+	DirectorController->GetBacklotHUD()->ShowWorldPopup(
+		TEXT("HEY! OVER HERE!"),
+		Megaphone->GetLastNoiseLocation(),
+		FLinearColor{0.4f, 0.8f, 1.0f});
 }
 
 bool ADirectorCharacter::TryUseUploadTerminal()
@@ -374,7 +478,8 @@ void ADirectorCharacter::ReceiveGuardShot(const FVector& ShotOrigin)
 	}
 	const FVector AwayDirection{
 		(GetActorLocation() - ShotOrigin).GetSafeNormal2D()};
-	if (Health->GetCurrentHealth() > 0 && !Grapple->IsGrappling())
+	if (Health->GetCurrentHealth() > 0 && !Grapple->IsGrappling()
+		&& !MountedCameraRig.IsValid())
 	{
 		LaunchCharacter(AwayDirection
 			* DirectorConstants::ShotKnockbackSpeed, false, false);
@@ -394,6 +499,7 @@ void ADirectorCharacter::HandleHealthDepleted()
 void ADirectorCharacter::RespawnAt(
 	const FTransform& RespawnTransform)
 {
+	DismountCameraRig();
 	Grapple->CancelGrapple();
 	UnCrouch();
 	GetCharacterMovement()->StopMovementImmediately();
@@ -429,4 +535,15 @@ UTakedownComponent*
 ADirectorCharacter::GetTakedownComponent() const
 {
 	return Takedown;
+}
+
+UMegaphoneComponent*
+ADirectorCharacter::GetMegaphoneComponent() const
+{
+	return Megaphone;
+}
+
+bool ADirectorCharacter::IsMountedOnCameraRig() const
+{
+	return MountedCameraRig.IsValid();
 }

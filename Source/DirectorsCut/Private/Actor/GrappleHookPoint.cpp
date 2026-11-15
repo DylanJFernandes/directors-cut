@@ -25,8 +25,8 @@ AGrappleHookPoint::AGrappleHookPoint()
 	GlowLight = CreateDefaultSubobject<UPointLightComponent>(
 		TEXT("GlowLight"));
 	GlowLight->SetupAttachment(SphereMesh);
-	GlowLight->SetIntensity(1500.0f);
-	GlowLight->SetAttenuationRadius(350.0f);
+	GlowLight->SetIntensity(500.0f);
+	GlowLight->SetAttenuationRadius(260.0f);
 	GlowLight->SetCastShadows(false);
 }
 
