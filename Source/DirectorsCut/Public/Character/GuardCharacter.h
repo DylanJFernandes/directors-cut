@@ -52,8 +52,10 @@ public:
 	/* Knocks the guard out for good */
 	void ReceiveTakedown();
 
-	/* Knocks the guard out and yanks him toward a location */
-	void ReceiveGrapplePull(const FVector& PullerLocation);
+	/* Takes one tommy gun hit, which alerts the guard to the
+	   shooter. Returns whether the hit knocked him out. */
+	bool ReceiveBulletHit(const FVector& ShooterLocation,
+		const FVector& ShotDirection);
 
 	/* Puts the guard straight into chasing and shooting */
 	void BecomeAlert(const FVector& KnownPlayerLocation);
@@ -197,6 +199,10 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Custom|Components")
 	TObjectPtr<UBeamMeshComponent> LaserBeam;
 
+	/* Greybox gun held in front of the guard */
+	UPROPERTY(VisibleAnywhere, Category = "Custom|Components")
+	TObjectPtr<UStaticMeshComponent> GunMesh;
+
 	/* Material instance that carries the marker color */
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> StateMarkerMaterial;
@@ -212,6 +218,10 @@ private:
 	/* Detection meter, from 0 to 1 */
 	UPROPERTY(VisibleAnywhere, Category = "Custom|State")
 	float DetectionMeter;
+
+	/* Tommy gun hits the guard can still take */
+	UPROPERTY(VisibleAnywhere, Category = "Custom|State")
+	int32 HealthRemaining;
 
 	/* Whether AI perception currently sees the player */
 	bool bCanSeePlayer;

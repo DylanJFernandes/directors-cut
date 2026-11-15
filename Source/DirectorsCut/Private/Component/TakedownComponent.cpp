@@ -3,7 +3,9 @@
 #include "Character/GuardCharacter.h"
 #include "Data/BacklotTuningSettings.h"
 #include "EngineUtils.h"
+#include "Game/BacklotSoundLibrary.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Player/DirectorPlayerController.h"
 #include "TimerManager.h"
@@ -18,29 +20,39 @@ namespace TakedownConstants
 	/* Speed at which the director drops onto a guard */
 	constexpr float DropOntoGuardSpeed{1400.0f};
 
-	/* Upward part of the knockback from a failed takedown */
-	constexpr float KnockbackUpwardSpeed{320.0f};
+	/* Extra seconds the held guard stays frozen, so he cannot
+	   break free on the frame the takedown lands */
+	constexpr float StruggleHoldMarginSeconds{0.5f};
 }
 
 UTakedownComponent::UTakedownComponent()
+	: StruggleStartTimeSeconds{0.0f}
 {
 	PrimaryComponentTick.bCanEverTick = false;
+}
+
+void UTakedownComponent::EndPlay(
+	const EEndPlayReason::Type EndPlayReason)
+{
+	GetWorld()->GetTimerManager().ClearAllTimersForObject(this);
+	EndDramaticCut();
+	Super::EndPlay(EndPlayReason);
 }
 
 void UTakedownComponent::TryTakedown()
 {
 	const FTakedownOpportunity Opportunity{
 		FindTakedownOpportunity()};
-	if (!Opportunity.Guard.IsValid())
+	if (!Opportunity.Guard.IsValid() || IsStruggling())
 	{
 		return;
 	}
-	if (Opportunity.bWillSucceed)
+	if (Opportunity.bIsInstant)
 	{
 		PerformTakedown(Opportunity);
 		return;
 	}
-	FailTakedown(*Opportunity.Guard);
+	BeginStruggle(*Opportunity.Guard);
 }
 
 FTakedownOpportunity
@@ -53,7 +65,8 @@ UTakedownComponent::FindTakedownOpportunity() const
 		GuardIterator; ++GuardIterator)
 	{
 		const AGuardCharacter& Guard{**GuardIterator};
-		const bool bIsBelow{IsGuardBelowInReach(Guard)};
+		const bool bIsBelow{!Guard.IsAlert()
+			&& IsGuardBelowInReach(Guard)};
 		const float Distance{static_cast<float>(FVector::Dist(
 			OwnerLocation, Guard.GetActorLocation()))};
 		const bool bIsInReach{
@@ -66,8 +79,8 @@ UTakedownComponent::FindTakedownOpportunity() const
 		BestDistance = Distance;
 		Opportunity.Guard = *GuardIterator;
 		Opportunity.bIsFromAbove = bIsBelow;
-		Opportunity.bWillSucceed =
-			WouldTakedownSucceed(Guard, bIsBelow);
+		Opportunity.bIsInstant =
+			IsGuardCaughtOffGuard(Guard, bIsBelow);
 	}
 	return Opportunity;
 }
@@ -105,7 +118,7 @@ bool UTakedownComponent::IsGuardBelowInReach(
 	return !bIsBlocked;
 }
 
-bool UTakedownComponent::WouldTakedownSucceed(
+bool UTakedownComponent::IsGuardCaughtOffGuard(
 	const AGuardCharacter& Guard, bool bIsFromAbove) const
 {
 	if (Guard.IsStunned())
@@ -141,6 +154,7 @@ void UTakedownComponent::PerformTakedown(
 void UTakedownComponent::PlayCutFeedback(
 	const FVector& CutLocation)
 {
+	BacklotSoundLibrary::PlayClapperboard(this, CutLocation);
 	ShowPopup(TEXT("CUT!"),
 		CutLocation + FVector{0.0f, 0.0f, 120.0f},
 		FLinearColor{1.0f, 0.9f, 0.2f});
@@ -166,27 +180,87 @@ void UTakedownComponent::EndDramaticCut()
 	UGameplayStatics::SetGlobalTimeDilation(this, 1.0f);
 }
 
-void UTakedownComponent::FailTakedown(AGuardCharacter& Guard)
+void UTakedownComponent::BeginStruggle(AGuardCharacter& Guard)
 {
+	const float StruggleSeconds{
+		UBacklotTuningSettings::Get().AlertTakedownSeconds};
 	const FVector OwnerLocation{GetOwner()->GetActorLocation()};
+	StrugglingGuard = &Guard;
+	StruggleStartTimeSeconds = GetWorld()->GetTimeSeconds();
 	Guard.BecomeAlert(OwnerLocation);
-	ShowPopup(TEXT("NO GOOD!"),
-		Guard.GetActorLocation() + FVector{0.0f, 0.0f, 120.0f},
-		FLinearColor{1.0f, 0.2f, 0.2f});
+	Guard.ApplyStun(StruggleSeconds
+		+ TakedownConstants::StruggleHoldMarginSeconds);
 
-	ACharacter* OwnerCharacter{Cast<ACharacter>(GetOwner())};
-	if (!OwnerCharacter)
+	if (ACharacter* OwnerCharacter{Cast<ACharacter>(GetOwner())})
+	{
+		const FVector ToGuard{
+			Guard.GetActorLocation() - OwnerLocation};
+		OwnerCharacter->SetActorRotation(
+			FRotator{0.0f, ToGuard.Rotation().Yaw, 0.0f});
+		OwnerCharacter->GetCharacterMovement()
+			->StopMovementImmediately();
+		OwnerCharacter->GetCharacterMovement()->DisableMovement();
+	}
+	GetWorld()->GetTimerManager().SetTimer(StruggleTimerHandle,
+		this, &UTakedownComponent::FinishStruggle,
+		StruggleSeconds);
+}
+
+void UTakedownComponent::FinishStruggle()
+{
+	AGuardCharacter* Guard{StrugglingGuard.Get()};
+	StrugglingGuard.Reset();
+	ReleaseOwnerMovement();
+	if (!Guard || Guard->IsTakenDown())
 	{
 		return;
 	}
-	const FVector AwayDirection{(OwnerLocation
-		- Guard.GetActorLocation()).GetSafeNormal2D()};
-	OwnerCharacter->LaunchCharacter(AwayDirection
-		* UBacklotTuningSettings::Get()
-			.FailedTakedownKnockbackSpeed
-		+ FVector{0.0f, 0.0f,
-			TakedownConstants::KnockbackUpwardSpeed},
-		true, true);
+	FTakedownOpportunity Opportunity;
+	Opportunity.Guard = Guard;
+	Opportunity.bIsInstant = true;
+	PerformTakedown(Opportunity);
+}
+
+void UTakedownComponent::CancelStruggle()
+{
+	if (!IsStruggling())
+	{
+		return;
+	}
+	GetWorld()->GetTimerManager().ClearTimer(StruggleTimerHandle);
+	StrugglingGuard.Reset();
+	ReleaseOwnerMovement();
+}
+
+void UTakedownComponent::ReleaseOwnerMovement() const
+{
+	const ACharacter* OwnerCharacter{
+		Cast<ACharacter>(GetOwner())};
+	if (OwnerCharacter && OwnerCharacter->GetCharacterMovement()
+		->MovementMode == MOVE_None)
+	{
+		OwnerCharacter->GetCharacterMovement()
+			->SetMovementMode(MOVE_Walking);
+	}
+}
+
+bool UTakedownComponent::IsStruggling() const
+{
+	return GetWorld()->GetTimerManager().IsTimerActive(
+		StruggleTimerHandle);
+}
+
+float UTakedownComponent::GetStruggleProgress() const
+{
+	if (!IsStruggling())
+	{
+		return 0.0f;
+	}
+	const float ElapsedSeconds{static_cast<float>(
+		GetWorld()->GetTimeSeconds() - StruggleStartTimeSeconds)};
+	return FMath::Clamp(ElapsedSeconds
+		/ UBacklotTuningSettings::Get().AlertTakedownSeconds,
+		0.0f, 1.0f);
 }
 
 void UTakedownComponent::ShowPopup(const FString& Text,

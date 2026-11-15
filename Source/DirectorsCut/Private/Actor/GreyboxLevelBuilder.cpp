@@ -1,7 +1,7 @@
 #include "Actor/GreyboxLevelBuilder.h"
 
-#include "Actor/CameraRigTurret.h"
 #include "Actor/GrappleHookPoint.h"
+#include "Actor/TommyGunPickup.h"
 #include "Actor/UploadTerminal.h"
 #include "Actor/ZoneCheckpoint.h"
 #include "Character/GuardCharacter.h"
@@ -473,9 +473,9 @@ void AGreyboxLevelBuilder::BuildEditingBay()
 		GetActorTransform().TransformPosition(FVector{
 			LevelEndX - 150.0f, 0.0f, CharacterSpawnHeight})});
 
-	GetWorld()->SpawnActor<ACameraRigTurret>(
+	GetWorld()->SpawnActor<ATommyGunPickup>(
 		GetActorTransform().TransformPosition(
-			FVector{17620.0f, 0.0f, 75.0f}), GetActorRotation());
+			FVector{17250.0f, 0.0f, 130.0f}), GetActorRotation());
 	AddSign(TEXT("START THE UPLOAD AND STAY CLOSE"),
 		FVector{17600.0f, 0.0f, 420.0f}, 60.0f);
 	AddCheckpoint(TEXT("Editing Bay"),

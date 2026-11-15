@@ -2,16 +2,17 @@
 
 #include "Character/GuardCharacter.h"
 
-#include "Actor/CameraRigTurret.h"
 #include "Actor/UploadTerminal.h"
 #include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
 #include "Component/BeamMeshComponent.h"
 #include "Component/CameraFlashComponent.h"
 #include "Component/DirectorHealthComponent.h"
+#include "Component/DirectorLocomotionComponent.h"
 #include "Component/GrappleComponent.h"
 #include "Component/MegaphoneComponent.h"
 #include "Component/TakedownComponent.h"
+#include "Component/TommyGunComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -120,6 +121,15 @@ ADirectorCharacter::ADirectorCharacter()
 		TEXT("Takedown"));
 	Megaphone = CreateDefaultSubobject<UMegaphoneComponent>(
 		TEXT("Megaphone"));
+	Locomotion =
+		CreateDefaultSubobject<UDirectorLocomotionComponent>(
+			TEXT("Locomotion"));
+
+	TommyGun = CreateDefaultSubobject<UTommyGunComponent>(
+		TEXT("TommyGun"));
+	TommyGun->SetupAttachment(GetCapsuleComponent());
+	TommyGun->SetRelativeLocation(FVector{40.0f, 30.0f, 28.0f});
+	TommyGun->SetRelativeScale3D(FVector{1.5f});
 }
 
 void ADirectorCharacter::BeginPlay()
@@ -131,6 +141,8 @@ void ADirectorCharacter::BeginPlay()
 	GrappleTether->SetBeamColor(FLinearColor{0.9f, 0.8f, 0.5f});
 	Health->OnHealthDepleted.BindUObject(this,
 		&ADirectorCharacter::HandleHealthDepleted);
+	Grapple->OnGrappleReachedGuard.BindUObject(this,
+		&ADirectorCharacter::HandleGrappleReachedGuard);
 }
 
 void ADirectorCharacter::ApplyTuning()
@@ -139,9 +151,10 @@ void ADirectorCharacter::ApplyTuning()
 		UBacklotTuningSettings::Get()};
 	UCharacterMovementComponent* Movement{
 		GetCharacterMovement()};
-	Movement->MaxWalkSpeed = Tuning.PlayerRunSpeed;
+	Movement->MaxWalkSpeed = Tuning.PlayerWalkSpeed;
 	Movement->MaxWalkSpeedCrouched = Tuning.PlayerCrouchSpeed;
 	Movement->JumpZVelocity = Tuning.PlayerJumpVelocity;
+	Movement->GravityScale = Tuning.PlayerGravityScale;
 	Movement->AirControl = Tuning.PlayerAirControl;
 	CameraBoom->TargetArmLength = Tuning.CameraBoomLength;
 }
@@ -150,17 +163,6 @@ void ADirectorCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UpdateGrappleTether();
-	DismountIfKnockedOffCameraRig();
-}
-
-void ADirectorCharacter::DismountIfKnockedOffCameraRig()
-{
-	const bool bWasKnockedOff{MountedCameraRig.IsValid()
-		&& GetCharacterMovement()->MovementMode != MOVE_None};
-	if (bWasKnockedOff)
-	{
-		DismountCameraRig();
-	}
 }
 
 void ADirectorCharacter::UpdateGrappleTether()
@@ -202,6 +204,7 @@ void ADirectorCharacter::CreateInputActions()
 	CrouchAction = CreateButtonAction(EKeys::C);
 	DirectorMappingContext->MapKey(CrouchAction,
 		EKeys::LeftControl);
+	SprintAction = CreateButtonAction(EKeys::LeftShift);
 	InteractAction = CreateButtonAction(EKeys::E);
 	FlashAction = CreateButtonAction(EKeys::Q);
 	TakedownAction = CreateButtonAction(EKeys::F);
@@ -268,6 +271,11 @@ void ADirectorCharacter::BindInputActions(
 		this, &ADirectorCharacter::HandleJumpReleased);
 	EnhancedInput->BindAction(CrouchAction, ETriggerEvent::Started,
 		this, &ADirectorCharacter::HandleCrouchPressed);
+	EnhancedInput->BindAction(SprintAction, ETriggerEvent::Started,
+		this, &ADirectorCharacter::HandleSprintPressed);
+	EnhancedInput->BindAction(SprintAction,
+		ETriggerEvent::Completed, this,
+		&ADirectorCharacter::HandleSprintReleased);
 	EnhancedInput->BindAction(InteractAction,
 		ETriggerEvent::Started, this,
 		&ADirectorCharacter::HandleInteractPressed);
@@ -281,12 +289,15 @@ void ADirectorCharacter::BindInputActions(
 		&ADirectorCharacter::HandleMegaphonePressed);
 	EnhancedInput->BindAction(FireAction, ETriggerEvent::Started,
 		this, &ADirectorCharacter::HandleFirePressed);
+	EnhancedInput->BindAction(FireAction, ETriggerEvent::Completed,
+		this, &ADirectorCharacter::HandleFireReleased);
 }
 
 void ADirectorCharacter::HandleMove(
 	const FInputActionValue& ActionValue)
 {
-	const FVector2D MoveInput{ActionValue.Get<FVector2D>()};
+	const FVector2D MoveInput{ActionValue.Get<FVector2D>()
+		* Locomotion->GetMoveInputScale()};
 	const FRotator YawRotation{0.0f, GetControlRotation().Yaw, 0.0f};
 	const FRotationMatrix YawMatrix{YawRotation};
 	AddMovementInput(YawMatrix.GetUnitAxis(EAxis::X), MoveInput.Y);
@@ -305,6 +316,10 @@ void ADirectorCharacter::HandleLook(
 
 void ADirectorCharacter::HandleJumpPressed()
 {
+	if (IsBusy() || Locomotion->TrySlideJump())
+	{
+		return;
+	}
 	UnCrouch();
 	Jump();
 }
@@ -316,98 +331,112 @@ void ADirectorCharacter::HandleJumpReleased()
 
 void ADirectorCharacter::HandleCrouchPressed()
 {
-	if (IsCrouched())
+	if (!IsBusy())
 	{
-		UnCrouch();
-		return;
+		Locomotion->HandleCrouchPressed();
 	}
-	Crouch();
+}
+
+void ADirectorCharacter::HandleSprintPressed()
+{
+	Locomotion->SetWantsToSprint(true);
+}
+
+void ADirectorCharacter::HandleSprintReleased()
+{
+	Locomotion->SetWantsToSprint(false);
+}
+
+void ADirectorCharacter::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+	Locomotion->HandleLanded();
+}
+
+void ADirectorCharacter::OnMovementModeChanged(
+	EMovementMode PreviousMovementMode, uint8 PreviousCustomMode)
+{
+	Super::OnMovementModeChanged(PreviousMovementMode,
+		PreviousCustomMode);
+	const bool bWalkedOffLedge{
+		PreviousMovementMode == MOVE_Walking
+		&& GetCharacterMovement()->MovementMode == MOVE_Falling};
+	if (bWalkedOffLedge && Locomotion)
+	{
+		Locomotion->HandleWalkedOffLedge();
+	}
 }
 
 void ADirectorCharacter::HandleInteractPressed()
 {
-	if (MountedCameraRig.IsValid())
-	{
-		DismountCameraRig();
-		return;
-	}
-	if (TryUseUploadTerminal() || TryMountCameraRig()
-		|| TryReelInStunnedGuard())
+	if (IsBusy() || TryUseUploadTerminal())
 	{
 		return;
 	}
-	Grapple->TryStartGrapple();
+	if (Grapple->TryStartGrapple())
+	{
+		Locomotion->CancelSlide();
+	}
 }
 
-bool ADirectorCharacter::TryReelInStunnedGuard()
+void ADirectorCharacter::HandleGrappleReachedGuard(
+	AGuardCharacter& Guard)
 {
-	const AGuardCharacter* Guard{Grapple->FindPullableGuard()};
-	if (!Guard)
+	if (!Guard.IsStunned())
 	{
-		return false;
+		return;
 	}
-	const FVector GuardLocation{Guard->GetActorLocation()};
-	Grapple->TryPullStunnedGuard();
+	const FVector GuardLocation{Guard.GetActorLocation()};
+	Guard.ReceiveTakedown();
 	Takedown->PlayCutFeedback(GuardLocation);
-	return true;
-}
-
-bool ADirectorCharacter::TryMountCameraRig()
-{
-	for (TActorIterator<ACameraRigTurret> RigIterator{GetWorld()};
-		RigIterator; ++RigIterator)
-	{
-		if (!RigIterator->CanBeMountedFrom(GetActorLocation()))
-		{
-			continue;
-		}
-		MountedCameraRig = *RigIterator;
-		Grapple->CancelGrapple();
-		UnCrouch();
-		SetActorLocation(RigIterator->GetSeatLocation());
-		GetCharacterMovement()->DisableMovement();
-		bUseControllerRotationYaw = true;
-		return true;
-	}
-	return false;
-}
-
-void ADirectorCharacter::DismountCameraRig()
-{
-	MountedCameraRig.Reset();
-	bUseControllerRotationYaw = false;
-	if (GetCharacterMovement()->MovementMode == MOVE_None)
-	{
-		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
-	}
 }
 
 void ADirectorCharacter::HandleFirePressed()
 {
-	if (!MountedCameraRig.IsValid() || !GetController())
+	if (!IsBusy())
 	{
-		return;
+		TommyGun->StartFiring();
 	}
-	FVector ViewLocation;
-	FRotator ViewRotation;
-	GetController()->GetPlayerViewPoint(ViewLocation,
-		ViewRotation);
-	MountedCameraRig->TryFireSpotlight(ViewLocation,
-		ViewRotation.Vector());
+}
+
+void ADirectorCharacter::HandleFireReleased()
+{
+	TommyGun->StopFiring();
+}
+
+void ADirectorCharacter::EquipTommyGun()
+{
+	TommyGun->Equip();
+	bUseControllerRotationYaw = true;
+	GetCharacterMovement()->bOrientRotationToMovement = false;
+	ADirectorPlayerController* DirectorController{
+		Cast<ADirectorPlayerController>(GetController())};
+	if (DirectorController && DirectorController->GetBacklotHUD())
+	{
+		DirectorController->GetBacklotHUD()->ShowCenterMessage(
+			TEXT("TOMMY GUN!  Hold the left mouse button."));
+	}
+}
+
+bool ADirectorCharacter::IsBusy() const
+{
+	return Takedown->IsStruggling();
 }
 
 void ADirectorCharacter::HandleMegaphonePressed()
 {
 	ADirectorPlayerController* DirectorController{
 		Cast<ADirectorPlayerController>(GetController())};
-	if (!Megaphone->TryMakeNoise() || !DirectorController
+	if (IsBusy() || !Megaphone->TryMakeNoise()
+		|| !DirectorController
 		|| !DirectorController->GetBacklotHUD())
 	{
 		return;
 	}
 	DirectorController->GetBacklotHUD()->ShowWorldPopup(
 		TEXT("HEY! OVER HERE!"),
-		Megaphone->GetLastNoiseLocation(),
+		Megaphone->GetLastNoiseLocation()
+			+ FVector{0.0f, 0.0f, 130.0f},
 		FLinearColor{0.4f, 0.8f, 1.0f});
 }
 
@@ -428,7 +457,7 @@ bool ADirectorCharacter::TryUseUploadTerminal()
 
 void ADirectorCharacter::HandleFlashPressed()
 {
-	if (!CameraFlash->TryFlash())
+	if (IsBusy() || !CameraFlash->TryFlash())
 	{
 		return;
 	}
@@ -446,6 +475,11 @@ void ADirectorCharacter::HideFlashLight()
 
 void ADirectorCharacter::HandleTakedownPressed()
 {
+	if (Takedown->FindTakedownOpportunity().Guard.IsValid())
+	{
+		Locomotion->CancelSlide();
+		TommyGun->StopFiring();
+	}
 	Takedown->TryTakedown();
 }
 
@@ -479,7 +513,7 @@ void ADirectorCharacter::ReceiveGuardShot(const FVector& ShotOrigin)
 	const FVector AwayDirection{
 		(GetActorLocation() - ShotOrigin).GetSafeNormal2D()};
 	if (Health->GetCurrentHealth() > 0 && !Grapple->IsGrappling()
-		&& !MountedCameraRig.IsValid())
+		&& !IsBusy())
 	{
 		LaunchCharacter(AwayDirection
 			* DirectorConstants::ShotKnockbackSpeed, false, false);
@@ -499,7 +533,9 @@ void ADirectorCharacter::HandleHealthDepleted()
 void ADirectorCharacter::RespawnAt(
 	const FTransform& RespawnTransform)
 {
-	DismountCameraRig();
+	Takedown->CancelStruggle();
+	Locomotion->CancelSlide();
+	TommyGun->StopFiring();
 	Grapple->CancelGrapple();
 	UnCrouch();
 	GetCharacterMovement()->StopMovementImmediately();
@@ -543,7 +579,14 @@ ADirectorCharacter::GetMegaphoneComponent() const
 	return Megaphone;
 }
 
-bool ADirectorCharacter::IsMountedOnCameraRig() const
+UDirectorLocomotionComponent*
+ADirectorCharacter::GetLocomotionComponent() const
 {
-	return MountedCameraRig.IsValid();
+	return Locomotion;
+}
+
+UTommyGunComponent*
+ADirectorCharacter::GetTommyGunComponent() const
+{
+	return TommyGun;
 }

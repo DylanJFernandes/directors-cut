@@ -53,7 +53,8 @@ private:
 	/* Adds the soundstage catwalks and their hook points */
 	void BuildCatwalks();
 
-	/* The finale room: terminal, three doors, cover */
+	/* The finale room: terminal, three doors, cover and the
+	   tommy gun */
 	void BuildEditingBay();
 
 	// Pieces

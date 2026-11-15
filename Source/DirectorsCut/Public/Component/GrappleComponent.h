@@ -8,9 +8,13 @@ class ACharacter;
 class AGrappleHookPoint;
 class AGuardCharacter;
 
-/* The film reel grapple. Every frame it picks the hook point
-   closest to the center of the screen, and on request it flies
-   the owning character to that point along a smooth arc. */
+/* Broadcast when a grapple aimed at a guard reaches him */
+DECLARE_DELEGATE_OneParam(FGrappleReachedGuard, AGuardCharacter&);
+
+/* The film reel grapple. Every frame it picks the guard or hook
+   point closest to the center of the screen, and on request it
+   flies the owning character there along a smooth arc. Zipping
+   to a guard keeps the speed of the flight. */
 UCLASS()
 class UGrappleComponent : public UActorComponent
 {
@@ -20,29 +24,32 @@ public:
 	/* Enables ticking for targeting and arc travel */
 	UGrappleComponent();
 
-	/* Starts flying to the targeted hook point. Returns false
-	   when no hook point is targeted. */
+	/* Starts flying to the targeted guard or hook point.
+	   Returns false when there is no target or the film reel
+	   is still on cooldown. */
 	bool TryStartGrapple();
 
 	/* Stops an active grapple and lets the owner fall */
 	void CancelGrapple();
 
-	/* Reels in the stunned guard the owner is aiming at and
-	   knocks him out. Returns false when there is none. */
-	bool TryPullStunnedGuard();
-
-	/* Returns the stunned guard the owner is aiming at and
-	   could reel in, if any */
-	AGuardCharacter* FindPullableGuard() const;
-
 	/* Returns the hook point E would grapple to, if any */
 	AGrappleHookPoint* GetTargetedHookPoint() const;
+
+	/* Returns the guard E would zip to, if any */
+	AGuardCharacter* GetTargetedGuard() const;
 
 	/* Returns whether the owner is flying along a grapple */
 	bool IsGrappling() const;
 
 	/* Returns where the active grapple is heading */
 	FVector GetGrappleDestination() const;
+
+	/* Returns how much of the cooldown is left, from 1 (just
+	   used) to 0 (ready) */
+	float GetCooldownFractionRemaining() const;
+
+	/* Fires when a grapple aimed at a guard reaches him */
+	FGrappleReachedGuard OnGrappleReachedGuard;
 
 protected:
 	/* Caches the owning character */
@@ -55,10 +62,16 @@ protected:
 
 private:
 	/* Retargets and updates the look of the hook points */
-	void UpdateTargetedHookPoint();
+	void UpdateTargets();
 
 	/* Returns the reachable hook point nearest screen center */
-	AGrappleHookPoint* FindBestHookPoint() const;
+	AGrappleHookPoint* FindBestHookPoint(
+		const FVector& ViewLocation,
+		const FVector& ViewDirection) const;
+
+	/* Returns the reachable guard nearest screen center */
+	AGuardCharacter* FindBestGuard(const FVector& ViewLocation,
+		const FVector& ViewDirection) const;
 
 	/* Returns the angle in degrees between the view direction
 	   and the hook point, or a negative value when the hook
@@ -73,6 +86,11 @@ private:
 	float GetAimAngleToLocation(const FVector& Location,
 		const FVector& ViewLocation,
 		const FVector& ViewDirection) const;
+
+	/* Returns whether a location is neither too close nor
+	   farther than the given range from the owner */
+	bool IsWithinGrappleDistance(const FVector& Location,
+		float MaximumDistance) const;
 
 	/* Returns whether nothing solid blocks the view of a point */
 	bool HasLineOfSight(const FVector& ViewLocation,
@@ -103,6 +121,9 @@ private:
 	/* Seconds the active grapple has been running */
 	float GrappleElapsedSeconds;
 
+	/* World time at which the last grapple started */
+	float LastGrappleStartTimeSeconds;
+
 	// Cached Vars
 	/* Character that owns this component */
 	TWeakObjectPtr<ACharacter> CachedOwnerCharacter;
@@ -110,6 +131,12 @@ private:
 	/* Hook point E would grapple to */
 	TWeakObjectPtr<AGrappleHookPoint> TargetedHookPoint;
 
+	/* Guard E would zip to */
+	TWeakObjectPtr<AGuardCharacter> TargetedGuard;
+
 	/* Hook point the active grapple is flying to */
 	TWeakObjectPtr<AGrappleHookPoint> DestinationHookPoint;
+
+	/* Guard the active grapple is flying to */
+	TWeakObjectPtr<AGuardCharacter> DestinationGuard;
 };

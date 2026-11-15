@@ -323,3 +323,69 @@ the two duplicates were removed, and the merge then went through.
 
 **Lesson for the rest of the jam: close the editor before switching branches or
 merging**, or stay on one branch while it is open.
+
+## Nov 15, 13:00 to 13:45 - Second round: movement, tommy gun, feedback changes
+
+Dylan played the build and sent ten changes. All are in on
+`feature/movement-and-tommy-gun`, merged to `main`.
+
+**What changed**
+
+- **Grapple cooldown.** `GrappleCooldownSeconds`, default 1.25, shown as a 0 to 5
+  slider. It counts from launch. Chose 1.25 because flights last 0.5 to 0.9 s: long
+  enough to stop spam, short enough that hook-to-hook only adds a brief fall.
+- **Takedown on aware guards.** F on a guard who sees you now holds both of you for
+  `AlertTakedownSeconds` (1.2), then cuts. The old "NO GOOD!" knockback is gone. The
+  grab also makes the guard shout, so guards nearby come.
+- **Megaphone.** It now shouts from where the director stands (it used to throw the
+  noise to the aimed spot). Added a synthesized shout, the "HEY! OVER HERE!" popup
+  above him, and three rings that spread on the ground out to the hearing radius.
+- **Camera rig turret removed**: actor, input, HUD prompt and tuning values.
+- **Tommy gun.** Floats in the Editing Bay before the terminal; walking into it equips
+  it. Hold left mouse to spray hitscan shots along the camera. Greybox shape with a
+  film reel as the barrel and another as the drum.
+- **Guards.** Fire about once a second (was once every 2.6 s), carry a visible gun,
+  and take 6 tommy gun hits.
+- **Movement.** Walk 420, sprint 780 on Left Shift, slide on C at sprint speed (on the
+  ground or queued in the air), jump out of a slide keeping its speed, 350 bonus for
+  sliding off an edge.
+- **Grappling a guard** flies the director to him and exits at 950 forward, 300 up.
+  A stunned guard is cut on arrival; any other guard is not harmed.
+- **Gravity** scale 2.0 with jump velocity 800.
+
+**Decisions**
+
+- *Slide trigger.* Dylan described "jump, then crouch when you land". Pressing C on the
+  ground at sprint speed also slides, as in Black Ops 3. Both are in.
+- *Keeping chained slides from being overpowered.* Each chained slide starts 15% slower
+  and never below sprint speed; the penalty resets after 1.5 s. Slide-hopping the whole
+  level therefore settles at sprint speed.
+- *Zip to an unaware guard does not cut him.* Otherwise E from 1800 units would beat
+  all stealth. Flash, then zip, still cuts.
+- *Takedown from above stays instant only on unaware guards.* An alert guard must be
+  grabbed on the ground with the slow takedown.
+- *Sprinting, not walking, is what guards hear.* Sliding counts as crouched: quiet.
+- *The gun is kept after being caught* and has no ammo.
+- *Sounds* are four WAVs synthesized by a script and imported to `Content/Audio`. No
+  third-party audio.
+
+**Measured in Play-In-Editor (scripted input)**
+
+- Walk 420, sprint 780, slide 1029 at 0.1 s falling to 428 at 1.0 s, then back up into
+  a sprint.
+- Slide-jump kept 996 in the air; the chained slide on landing started near 935.
+- Sliding off a perch added 350.
+- Jump: 163 units high, 0.83 s.
+- Second grapple 0.5 s after the first was refused; at 1.7 s it launched.
+- Zip to a guard: arrived 132 units from him at 950 forward speed.
+- Slow takedown: director locked (could not walk) for 1.2 s, then the guard went down.
+- Megaphone rings and popup seen in a screenshot.
+- Tommy gun picked up by walking into it; a wave guard dropped after 0.57 s of fire.
+- Standing still in front of one wave guard: hit at 0.94 s and 1.94 s.
+
+**Not checked**
+
+- No hand play. Feel of the slide and gravity is untested by a person.
+- The finale past the first wave.
+- How the sounds actually sound; they were generated blind.
+- The code reviewer and judge agents were not run.
