@@ -11,9 +11,11 @@
 
 namespace GrappleConstants
 {
-	/* Hook points closer than this are not worth a grapple */
+	/* Targets closer than this are not worth a grapple */
 	constexpr float MinimumGrappleDistance{200.0f};
 
+	/* A grapple aimed at a guard ends this far from him */
+	constexpr float GuardArrivalDistance{140.0f};
 }
 
 UGrappleComponent::UGrappleComponent()
@@ -21,7 +23,8 @@ UGrappleComponent::UGrappleComponent()
 	  GrappleStartLocation{FVector::ZeroVector},
 	  GrappleDestination{FVector::ZeroVector},
 	  GrappleDurationSeconds{0.0f},
-	  GrappleElapsedSeconds{0.0f}
+	  GrappleElapsedSeconds{0.0f},
+	  LastGrappleStartTimeSeconds{-1000.0f}
 {
 	PrimaryComponentTick.bCanEverTick = true;
 }
@@ -37,16 +40,30 @@ void UGrappleComponent::TickComponent(float DeltaTime,
 	FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-	UpdateTargetedHookPoint();
+	UpdateTargets();
 	if (bIsGrappling)
 	{
 		AdvanceGrapple(DeltaTime);
 	}
 }
 
-void UGrappleComponent::UpdateTargetedHookPoint()
+void UGrappleComponent::UpdateTargets()
 {
-	AGrappleHookPoint* BestHookPoint{FindBestHookPoint()};
+	AGrappleHookPoint* BestHookPoint{nullptr};
+	TargetedGuard.Reset();
+	if (CachedOwnerCharacter.IsValid()
+		&& CachedOwnerCharacter->GetController())
+	{
+		FVector ViewLocation;
+		FRotator ViewRotation;
+		CachedOwnerCharacter->GetController()->GetPlayerViewPoint(
+			ViewLocation, ViewRotation);
+		TargetedGuard = FindBestGuard(ViewLocation,
+			ViewRotation.Vector());
+		BestHookPoint = TargetedGuard.IsValid() ? nullptr
+			: FindBestHookPoint(ViewLocation,
+				ViewRotation.Vector());
+	}
 	if (BestHookPoint == TargetedHookPoint.Get())
 	{
 		return;
@@ -62,19 +79,10 @@ void UGrappleComponent::UpdateTargetedHookPoint()
 	}
 }
 
-AGrappleHookPoint* UGrappleComponent::FindBestHookPoint() const
+AGrappleHookPoint* UGrappleComponent::FindBestHookPoint(
+	const FVector& ViewLocation,
+	const FVector& ViewDirection) const
 {
-	if (!CachedOwnerCharacter.IsValid()
-		|| !CachedOwnerCharacter->GetController())
-	{
-		return nullptr;
-	}
-	FVector ViewLocation;
-	FRotator ViewRotation;
-	CachedOwnerCharacter->GetController()->GetPlayerViewPoint(
-		ViewLocation, ViewRotation);
-	const FVector ViewDirection{ViewRotation.Vector()};
-
 	AGrappleHookPoint* BestHookPoint{nullptr};
 	float BestAimAngle{UBacklotTuningSettings::Get()
 		.GrappleAimConeHalfAngleDegrees};
@@ -93,28 +101,48 @@ AGrappleHookPoint* UGrappleComponent::FindBestHookPoint() const
 	return BestHookPoint;
 }
 
+AGuardCharacter* UGrappleComponent::FindBestGuard(
+	const FVector& ViewLocation,
+	const FVector& ViewDirection) const
+{
+	const UBacklotTuningSettings& Tuning{
+		UBacklotTuningSettings::Get()};
+	AGuardCharacter* BestGuard{nullptr};
+	float BestAimAngle{Tuning.GrappleGuardAimConeHalfAngleDegrees};
+	for (TActorIterator<AGuardCharacter> GuardIterator{GetWorld()};
+		GuardIterator; ++GuardIterator)
+	{
+		const FVector GuardLocation{
+			GuardIterator->GetActorLocation()};
+		const bool bCanBeGrappled{!GuardIterator->IsTakenDown()
+			&& *GuardIterator != DestinationGuard.Get()
+			&& IsWithinGrappleDistance(GuardLocation,
+				Tuning.GrappleGuardRange)};
+		const float AimAngle{GetAimAngleToLocation(GuardLocation,
+			ViewLocation, ViewDirection)};
+		if (bCanBeGrappled && AimAngle < BestAimAngle
+			&& HasLineOfSight(ViewLocation, GuardLocation))
+		{
+			BestAimAngle = AimAngle;
+			BestGuard = *GuardIterator;
+		}
+	}
+	return BestGuard;
+}
+
 float UGrappleComponent::GetAimAngleToHookPoint(
 	const AGrappleHookPoint& HookPoint,
 	const FVector& ViewLocation,
 	const FVector& ViewDirection) const
 {
 	const float NotGrappleable{-1.0f};
-	if (&HookPoint == DestinationHookPoint.Get())
-	{
-		return NotGrappleable;
-	}
 	const FVector HookLocation{HookPoint.GetActorLocation()};
-	const float DistanceFromOwner{static_cast<float>(
-		FVector::Dist(HookLocation,
-			CachedOwnerCharacter->GetActorLocation()))};
-	if (DistanceFromOwner
-			> UBacklotTuningSettings::Get().GrappleRange
-		|| DistanceFromOwner
-			< GrappleConstants::MinimumGrappleDistance)
-	{
-		return NotGrappleable;
-	}
-	if (!HasLineOfSight(ViewLocation, HookLocation))
+	const bool bCanBeGrappled{
+		&HookPoint != DestinationHookPoint.Get()
+		&& IsWithinGrappleDistance(HookLocation,
+			UBacklotTuningSettings::Get().GrappleRange)
+		&& HasLineOfSight(ViewLocation, HookLocation)};
+	if (!bCanBeGrappled)
 	{
 		return NotGrappleable;
 	}
@@ -134,6 +162,17 @@ float UGrappleComponent::GetAimAngleToLocation(
 		FMath::Acos(FMath::Clamp(AimDot, -1.0f, 1.0f)));
 }
 
+bool UGrappleComponent::IsWithinGrappleDistance(
+	const FVector& Location, float MaximumDistance) const
+{
+	const float DistanceFromOwner{static_cast<float>(
+		FVector::Dist(Location,
+			CachedOwnerCharacter->GetActorLocation()))};
+	return DistanceFromOwner <= MaximumDistance
+		&& DistanceFromOwner
+			>= GrappleConstants::MinimumGrappleDistance;
+}
+
 bool UGrappleComponent::HasLineOfSight(
 	const FVector& ViewLocation,
 	const FVector& TargetLocation) const
@@ -149,23 +188,29 @@ bool UGrappleComponent::HasLineOfSight(
 
 bool UGrappleComponent::TryStartGrapple()
 {
-	if (!TargetedHookPoint.IsValid()
-		|| !CachedOwnerCharacter.IsValid())
+	const bool bHasTarget{TargetedGuard.IsValid()
+		|| TargetedHookPoint.IsValid()};
+	if (!bHasTarget || !CachedOwnerCharacter.IsValid()
+		|| GetCooldownFractionRemaining() > 0.0f)
 	{
 		return false;
 	}
 	const UBacklotTuningSettings& Tuning{
 		UBacklotTuningSettings::Get()};
+	DestinationGuard = TargetedGuard;
 	DestinationHookPoint = TargetedHookPoint;
 	GrappleStartLocation =
 		CachedOwnerCharacter->GetActorLocation();
-	GrappleDestination = TargetedHookPoint->GetActorLocation();
+	GrappleDestination = TargetedGuard.IsValid()
+		? TargetedGuard->GetActorLocation()
+		: TargetedHookPoint->GetActorLocation();
 	const float TravelDistance{static_cast<float>(FVector::Dist(
 		GrappleStartLocation, GrappleDestination))};
 	GrappleDurationSeconds = FMath::Max(
 		Tuning.GrappleMinimumTravelSeconds,
 		TravelDistance / Tuning.GrappleTravelSpeed);
 	GrappleElapsedSeconds = 0.0f;
+	LastGrappleStartTimeSeconds = GetWorld()->GetTimeSeconds();
 	bIsGrappling = true;
 
 	CachedOwnerCharacter->UnCrouch();
@@ -182,14 +227,23 @@ void UGrappleComponent::AdvanceGrapple(float DeltaTime)
 	{
 		return;
 	}
+	const bool bIsChasingGuard{DestinationGuard.IsValid()
+		&& !DestinationGuard->IsTakenDown()};
+	if (bIsChasingGuard)
+	{
+		GrappleDestination = DestinationGuard->GetActorLocation();
+	}
 	GrappleElapsedSeconds += DeltaTime;
 	const float Progress{FMath::Clamp(
 		GrappleElapsedSeconds / GrappleDurationSeconds,
 		0.0f, 1.0f)};
 
-	CachedOwnerCharacter->SetActorLocation(
-		GetArcLocation(Progress));
-	if (Progress >= 1.0f)
+	const FVector ArcLocation{GetArcLocation(Progress)};
+	CachedOwnerCharacter->SetActorLocation(ArcLocation);
+	const bool bHasReachedGuard{bIsChasingGuard
+		&& FVector::Dist(ArcLocation, GrappleDestination)
+			<= GrappleConstants::GuardArrivalDistance};
+	if (Progress >= 1.0f || bHasReachedGuard)
 	{
 		FinishGrapple();
 	}
@@ -215,15 +269,25 @@ void UGrappleComponent::FinishGrapple()
 	const FVector TravelDirection{
 		(GrappleDestination - GrappleStartLocation)
 			.GetSafeNormal2D()};
+	AGuardCharacter* ReachedGuard{DestinationGuard.Get()};
+	const bool bWasAimedAtGuard{ReachedGuard != nullptr};
 	bIsGrappling = false;
 	DestinationHookPoint.Reset();
+	DestinationGuard.Reset();
 
 	UCharacterMovementComponent* Movement{
 		CachedOwnerCharacter->GetCharacterMovement()};
 	Movement->SetMovementMode(MOVE_Falling);
-	Movement->Velocity =
-		TravelDirection * Tuning.GrappleExitForwardSpeed
-		+ FVector{0.0f, 0.0f, Tuning.GrappleExitUpwardSpeed};
+	Movement->Velocity = bWasAimedAtGuard
+		? TravelDirection * Tuning.GrappleGuardExitForwardSpeed
+			+ FVector{0.0f, 0.0f,
+				Tuning.GrappleGuardExitUpwardSpeed}
+		: TravelDirection * Tuning.GrappleExitForwardSpeed
+			+ FVector{0.0f, 0.0f, Tuning.GrappleExitUpwardSpeed};
+	if (ReachedGuard && !ReachedGuard->IsTakenDown())
+	{
+		OnGrappleReachedGuard.ExecuteIfBound(*ReachedGuard);
+	}
 }
 
 void UGrappleComponent::CancelGrapple()
@@ -234,61 +298,19 @@ void UGrappleComponent::CancelGrapple()
 	}
 	bIsGrappling = false;
 	DestinationHookPoint.Reset();
+	DestinationGuard.Reset();
 	CachedOwnerCharacter->GetCharacterMovement()
 		->SetMovementMode(MOVE_Falling);
-}
-
-bool UGrappleComponent::TryPullStunnedGuard()
-{
-	AGuardCharacter* Guard{FindPullableGuard()};
-	if (!Guard)
-	{
-		return false;
-	}
-	Guard->ReceiveGrapplePull(GetOwner()->GetActorLocation());
-	return true;
-}
-
-AGuardCharacter* UGrappleComponent::FindPullableGuard() const
-{
-	if (!CachedOwnerCharacter.IsValid()
-		|| !CachedOwnerCharacter->GetController())
-	{
-		return nullptr;
-	}
-	const UBacklotTuningSettings& Tuning{
-		UBacklotTuningSettings::Get()};
-	FVector ViewLocation;
-	FRotator ViewRotation;
-	CachedOwnerCharacter->GetController()->GetPlayerViewPoint(
-		ViewLocation, ViewRotation);
-
-	AGuardCharacter* BestGuard{nullptr};
-	float BestAimAngle{Tuning.GrapplePullAimConeHalfAngleDegrees};
-	for (TActorIterator<AGuardCharacter> GuardIterator{GetWorld()};
-		GuardIterator; ++GuardIterator)
-	{
-		const FVector GuardLocation{
-			GuardIterator->GetActorLocation()};
-		const bool bIsInRange{FVector::Dist(GuardLocation,
-			GetOwner()->GetActorLocation())
-			<= Tuning.GrapplePullRange};
-		const float AimAngle{GetAimAngleToLocation(GuardLocation,
-			ViewLocation, ViewRotation.Vector())};
-		if (GuardIterator->IsStunned() && bIsInRange
-			&& AimAngle < BestAimAngle
-			&& HasLineOfSight(ViewLocation, GuardLocation))
-		{
-			BestAimAngle = AimAngle;
-			BestGuard = *GuardIterator;
-		}
-	}
-	return BestGuard;
 }
 
 AGrappleHookPoint* UGrappleComponent::GetTargetedHookPoint() const
 {
 	return TargetedHookPoint.Get();
+}
+
+AGuardCharacter* UGrappleComponent::GetTargetedGuard() const
+{
+	return TargetedGuard.Get();
 }
 
 bool UGrappleComponent::IsGrappling() const
@@ -299,4 +321,19 @@ bool UGrappleComponent::IsGrappling() const
 FVector UGrappleComponent::GetGrappleDestination() const
 {
 	return GrappleDestination;
+}
+
+float UGrappleComponent::GetCooldownFractionRemaining() const
+{
+	const float CooldownSeconds{
+		UBacklotTuningSettings::Get().GrappleCooldownSeconds};
+	if (CooldownSeconds <= 0.0f)
+	{
+		return 0.0f;
+	}
+	const float SecondsSinceGrapple{static_cast<float>(
+		GetWorld()->GetTimeSeconds()
+			- LastGrappleStartTimeSeconds)};
+	return FMath::Clamp(
+		1.0f - SecondsSinceGrapple / CooldownSeconds, 0.0f, 1.0f);
 }

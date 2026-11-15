@@ -4,8 +4,9 @@
 #include "Components/ActorComponent.h"
 #include "MegaphoneComponent.generated.h"
 
-/* The director's megaphone. Throws his voice to the spot he is
-   aiming at; guards near that spot walk over to investigate. */
+/* The director's megaphone. He shouts through it where he
+   stands; every guard within earshot walks over to look, which
+   pulls them off their routes while he moves on. */
 UCLASS()
 class UMegaphoneComponent : public UActorComponent
 {
@@ -15,7 +16,7 @@ public:
 	/* Disables ticking; the megaphone is fully event driven */
 	UMegaphoneComponent();
 
-	/* Makes a noise where the owner is aiming, if recharged.
+	/* Shouts from where the owner stands, if recharged.
 	   Returns whether a noise was made. */
 	bool TryMakeNoise();
 
@@ -26,11 +27,10 @@ public:
 	/* Returns where the last noise was made */
 	FVector GetLastNoiseLocation() const;
 
-private:
-	/* Returns the spot the owner is aiming at, limited by the
-	   megaphone's range */
-	FVector FindAimedLocation() const;
+	/* Returns seconds since the megaphone was last used */
+	float GetSecondsSinceLastNoise() const;
 
+private:
 	/* Sends every guard near the noise to investigate it.
 	   Returns how many guards reacted. */
 	int32 AlertGuardsNearNoise(const FVector& NoiseLocation) const;

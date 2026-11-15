@@ -13,7 +13,9 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/SkeletalMesh.h"
 #include "EngineUtils.h"
+#include "Component/DirectorLocomotionComponent.h"
 #include "Game/BacklotGameState.h"
+#include "Game/BacklotSoundLibrary.h"
 #include "Game/GreyboxShapeLibrary.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -58,12 +60,10 @@ namespace GuardConstants
 	constexpr float LaserAimThickness{3.0f};
 	constexpr float LaserFireThickness{12.0f};
 
-	/* Upward speed of a guard being reeled in */
-	constexpr float GrapplePullUpwardSpeed{380.0f};
-
-	/* Fraction of the way to the director a reeled-in guard
-	   flies before landing */
-	constexpr float GrapplePullLandingFraction{0.8f};
+	/* Speed a guard is thrown back by the shot that drops him,
+	   along the shot and upward */
+	constexpr float BulletKnockbackSpeed{450.0f};
+	constexpr float BulletKnockbackUpwardSpeed{180.0f};
 
 	/* Seconds a knocked-out guard stays in the level */
 	constexpr float KnockedOutBodySeconds{20.0f};
@@ -94,6 +94,7 @@ AGuardCharacter::AGuardCharacter()
 	: CurrentState{EGuardState::Patrol},
 	  StateBeforeStun{EGuardState::Patrol},
 	  DetectionMeter{0.0f},
+	  HealthRemaining{1},
 	  bCanSeePlayer{false},
 	  bIsRelentless{false},
 	  LastKnownPlayerLocation{FVector::ZeroVector},
@@ -148,6 +149,15 @@ AGuardCharacter::AGuardCharacter()
 	StateMarker->SetCanEverAffectNavigation(false);
 	StateMarker->SetCastShadow(false);
 
+	GunMesh = CreateDefaultSubobject<UStaticMeshComponent>(
+		TEXT("GunMesh"));
+	GunMesh->SetupAttachment(GetCapsuleComponent());
+	GunMesh->SetRelativeLocation(FVector{38.0f, 22.0f, 40.0f});
+	GunMesh->SetRelativeScale3D(FVector{0.55f, 0.07f, 0.12f});
+	GunMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GunMesh->SetCanEverAffectNavigation(false);
+	GunMesh->SetCastShadow(false);
+
 	LaserBeam = CreateDefaultSubobject<UBeamMeshComponent>(
 		TEXT("LaserBeam"));
 	LaserBeam->SetupAttachment(GetCapsuleComponent());
@@ -161,8 +171,13 @@ void AGuardCharacter::BeginPlay()
 	StateMarkerMaterial = GreyboxShapeLibrary::ApplyGlowColor(
 		StateMarker,
 		GuardConstants::GetStateColor(EGuardState::Patrol));
+	GunMesh->SetStaticMesh(GreyboxShapeLibrary::GetCubeMesh());
+	GreyboxShapeLibrary::ApplyFlatColor(GunMesh,
+		FLinearColor{0.02f, 0.02f, 0.02f});
 	LaserBeam->SetBeamThickness(
 		GuardConstants::LaserAimThickness);
+	HealthRemaining =
+		UBacklotTuningSettings::Get().GuardMaximumHealth;
 	LastKnownPlayerLocation = GetActorLocation();
 	EnterState(EGuardState::Patrol);
 }
@@ -268,7 +283,8 @@ float AGuardCharacter::GetHearingDetectionRate(
 {
 	const UBacklotTuningSettings& Tuning{
 		UBacklotTuningSettings::Get()};
-	const bool bIsRunningOnGround{!Player.IsCrouched()
+	const bool bIsRunningOnGround{
+		Player.GetLocomotionComponent()->IsSprinting()
 		&& Player.GetCharacterMovement()->IsMovingOnGround()
 		&& Player.GetVelocity().Size2D()
 			> GuardConstants::AudibleFootstepSpeed};
@@ -592,6 +608,7 @@ void AGuardCharacter::FireShot()
 		Player->ReceiveGuardShot(ShotStart);
 	}
 
+	BacklotSoundLibrary::PlayGuardShot(this, ShotStart);
 	LaserBeam->SetBeamThickness(
 		GuardConstants::LaserFireThickness);
 	LaserBeam->SetBeamColor(FLinearColor::White);
@@ -724,6 +741,7 @@ void AGuardCharacter::ReceiveTakedown()
 	SetActorTickEnabled(false);
 	DetachFromControllerPendingDestroy();
 	StateMarker->SetHiddenInGame(true);
+	GunMesh->SetHiddenInGame(true);
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionEnabled(
 		ECollisionEnabled::NoCollision);
@@ -732,27 +750,26 @@ void AGuardCharacter::ReceiveTakedown()
 	SetLifeSpan(GuardConstants::KnockedOutBodySeconds);
 }
 
-void AGuardCharacter::ReceiveGrapplePull(
-	const FVector& PullerLocation)
+bool AGuardCharacter::ReceiveBulletHit(
+	const FVector& ShooterLocation, const FVector& ShotDirection)
 {
 	if (CurrentState == EGuardState::TakenDown)
 	{
-		return;
+		return false;
+	}
+	--HealthRemaining;
+	if (HealthRemaining > 0)
+	{
+		BecomeAlert(ShooterLocation);
+		return false;
 	}
 	ReceiveTakedown();
-	const FVector ToPuller{PullerLocation - GetActorLocation()};
-	const float FlightSeconds{2.0f
-		* GuardConstants::GrapplePullUpwardSpeed
-		/ FMath::Abs(GetWorld()->GetGravityZ())};
-	const float LandingDistance{
-		static_cast<float>(ToPuller.Size2D())
-		* GuardConstants::GrapplePullLandingFraction};
-	const float HorizontalSpeed{LandingDistance / FlightSeconds};
 	GetMesh()->AddImpulse(
-		ToPuller.GetSafeNormal2D() * HorizontalSpeed
+		ShotDirection * GuardConstants::BulletKnockbackSpeed
 		+ FVector{0.0f, 0.0f,
-			GuardConstants::GrapplePullUpwardSpeed},
+			GuardConstants::BulletKnockbackUpwardSpeed},
 		NAME_None, true);
+	return true;
 }
 
 void AGuardCharacter::BecomeAlert(
@@ -822,6 +839,8 @@ void AGuardCharacter::ResetToPatrolStart()
 		return;
 	}
 	DetectionMeter = 0.0f;
+	HealthRemaining =
+		UBacklotTuningSettings::Get().GuardMaximumHealth;
 	PatrolLocationIndex = 0;
 	if (!PatrolLocations.IsEmpty())
 	{

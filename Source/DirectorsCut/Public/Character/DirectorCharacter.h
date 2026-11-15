@@ -4,11 +4,12 @@
 #include "GameFramework/Character.h"
 #include "DirectorCharacter.generated.h"
 
-class ACameraRigTurret;
+class AGuardCharacter;
 class UBeamMeshComponent;
 class UCameraComponent;
 class UCameraFlashComponent;
 class UDirectorHealthComponent;
+class UDirectorLocomotionComponent;
 class UGrappleComponent;
 class UInputAction;
 class UInputMappingContext;
@@ -16,11 +17,13 @@ class UMegaphoneComponent;
 class UPointLightComponent;
 class USpringArmComponent;
 class UTakedownComponent;
+class UTommyGunComponent;
 struct FInputActionValue;
 
-/* The film director the player controls. Runs, jumps and
-   crouches, and carries his tools as components: the film reel
-   grapple, the camera flash and the clapperboard takedown. */
+/* The film director the player controls. Walks, sprints,
+   slides, jumps and crouches, and carries his tools as
+   components: the film reel grapple, the camera flash, the
+   clapperboard takedown, the megaphone and the tommy gun. */
 UCLASS()
 class ADirectorCharacter : public ACharacter
 {
@@ -51,8 +54,14 @@ public:
 	/* Returns the megaphone component */
 	UMegaphoneComponent* GetMegaphoneComponent() const;
 
-	/* Returns whether the director is on a camera rig */
-	bool IsMountedOnCameraRig() const;
+	/* Returns the sprint and slide component */
+	UDirectorLocomotionComponent* GetLocomotionComponent() const;
+
+	/* Returns the tommy gun component */
+	UTommyGunComponent* GetTommyGunComponent() const;
+
+	/* Hands the director the tommy gun */
+	void EquipTommyGun();
 
 protected:
 	/* Applies tuning values and binds the health delegate */
@@ -73,6 +82,14 @@ protected:
 	/* Restores the mesh height after crouching */
 	virtual void OnEndCrouch(float HalfHeightAdjust,
 		float ScaledHalfHeightAdjust) override;
+
+	/* Starts a slide that was queued in the air */
+	virtual void Landed(const FHitResult& Hit) override;
+
+	/* Tells the slide when the director runs off a ledge */
+	virtual void OnMovementModeChanged(
+		EMovementMode PreviousMovementMode,
+		uint8 PreviousCustomMode) override;
 
 	/* Treats falling out of the level as being caught */
 	virtual void FellOutOfWorld(
@@ -110,33 +127,35 @@ private:
 	/* Stops a held jump */
 	void HandleJumpReleased();
 
-	/* Toggles crouching */
+	/* Starts a slide when fast enough, else toggles crouching */
 	void HandleCrouchPressed();
 
-	/* Starts the upload when next to the terminal, reels in a
-	   stunned guard when aiming at one, otherwise launches the
-	   film reel grapple */
+	/* Starts sprinting */
+	void HandleSprintPressed();
+
+	/* Stops sprinting */
+	void HandleSprintReleased();
+
+	/* Starts the upload when next to the terminal, otherwise
+	   launches the film reel grapple at the targeted guard or
+	   hook point */
 	void HandleInteractPressed();
 
-	/* Throws a noise to the aimed spot with the megaphone */
+	/* Shouts through the megaphone to draw guards over */
 	void HandleMegaphonePressed();
 
-	/* Fires the camera rig's spotlight while mounted */
+	/* Starts firing the tommy gun */
 	void HandleFirePressed();
 
-	/* Reels in the stunned guard being aimed at. Returns
-	   whether a guard was reeled in. */
-	bool TryReelInStunnedGuard();
+	/* Stops firing the tommy gun */
+	void HandleFireReleased();
 
-	/* Climbs onto a camera rig in reach. Returns whether the
-	   director mounted one. */
-	bool TryMountCameraRig();
+	/* Knocks out a stunned guard the grapple just reached */
+	void HandleGrappleReachedGuard(AGuardCharacter& Guard);
 
-	/* Climbs off the camera rig */
-	void DismountCameraRig();
-
-	/* Climbs off if something knocked the director away */
-	void DismountIfKnockedOffCameraRig();
+	/* Returns whether the director is held in place by a slow
+	   takedown and cannot use his tools */
+	bool IsBusy() const;
 
 	/* Fires the camera flash */
 	void HandleFlashPressed();
@@ -193,6 +212,14 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Custom|Components")
 	TObjectPtr<UMegaphoneComponent> Megaphone;
 
+	/* Sprinting and sliding */
+	UPROPERTY(VisibleAnywhere, Category = "Custom|Components")
+	TObjectPtr<UDirectorLocomotionComponent> Locomotion;
+
+	/* Film reel tommy gun, hidden until it is picked up */
+	UPROPERTY(VisibleAnywhere, Category = "Custom|Components")
+	TObjectPtr<UTommyGunComponent> TommyGun;
+
 	// Input
 	/* Mapping context holding every key binding */
 	UPROPERTY()
@@ -210,9 +237,13 @@ private:
 	UPROPERTY()
 	TObjectPtr<UInputAction> JumpAction;
 
-	/* Crouch toggle on C or Left Ctrl */
+	/* Crouch toggle or slide on C or Left Ctrl */
 	UPROPERTY()
 	TObjectPtr<UInputAction> CrouchAction;
+
+	/* Sprint while Left Shift is held */
+	UPROPERTY()
+	TObjectPtr<UInputAction> SprintAction;
 
 	/* Grapple or use the terminal on E */
 	UPROPERTY()
@@ -230,12 +261,9 @@ private:
 	UPROPERTY()
 	TObjectPtr<UInputAction> MegaphoneAction;
 
-	/* Camera rig spotlight on the left mouse button */
+	/* Tommy gun on the left mouse button */
 	UPROPERTY()
 	TObjectPtr<UInputAction> FireAction;
-
-	/* Camera rig the director is standing on, if any */
-	TWeakObjectPtr<ACameraRigTurret> MountedCameraRig;
 
 	/* Timer that switches the flash light off */
 	FTimerHandle FlashLightTimerHandle;

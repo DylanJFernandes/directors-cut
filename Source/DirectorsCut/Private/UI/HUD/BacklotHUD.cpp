@@ -1,6 +1,5 @@
 #include "UI/HUD/BacklotHUD.h"
 
-#include "Actor/CameraRigTurret.h"
 #include "Actor/GrappleHookPoint.h"
 #include "Actor/UploadTerminal.h"
 #include "Character/DirectorCharacter.h"
@@ -10,6 +9,8 @@
 #include "Component/GrappleComponent.h"
 #include "Component/MegaphoneComponent.h"
 #include "Component/TakedownComponent.h"
+#include "Component/TommyGunComponent.h"
+#include "Data/BacklotTuningSettings.h"
 #include "CanvasItem.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
@@ -35,6 +36,14 @@ namespace BacklotHUDConstants
 	constexpr float FlashWhiteoutSeconds{0.3f};
 	constexpr float HitTintSeconds{0.35f};
 
+	/* Seconds a megaphone ring takes to reach its full size,
+	   and the number of straight pieces it is drawn with */
+	constexpr float MegaphoneRingSeconds{0.9f};
+	constexpr int32 RingSegmentCount{40};
+
+	/* Seconds the tommy gun hit marker stays up */
+	constexpr float HitMarkerSeconds{0.08f};
+
 	const FLinearColor BarBackColor{0.0f, 0.0f, 0.0f, 0.6f};
 	const FLinearColor TextColor{1.0f, 1.0f, 1.0f};
 	const FLinearColor GoodColor{0.3f, 1.0f, 0.4f};
@@ -45,15 +54,17 @@ namespace BacklotHUDConstants
 	const TArray<FString> ControlsLines{
 		TEXT("CONTROLS"),
 		TEXT("WASD  Move        Mouse  Look"),
-		TEXT("Space  Jump"),
+		TEXT("Shift  Sprint (guards hear it)    Space  Jump"),
 		TEXT("C / Ctrl  Crouch (quiet, harder to see)"),
+		TEXT("C while sprinting or landing  Slide"),
+		TEXT("    jump out of a slide to keep the speed"),
 		TEXT("E  Film reel grapple to the yellow point"),
+		TEXT("E aimed at a guard  Zip to him"),
 		TEXT("Q  Camera flash (stuns guards in front)"),
-		TEXT("F  Clapperboard takedown (stunned,"),
-		TEXT("    unaware from behind, or from above)"),
-		TEXT("E on a stunned guard  Reel him in"),
-		TEXT("G  Megaphone (lures guards to where you aim)"),
-		TEXT("Guard shots: sidestep when the laser turns red"),
+		TEXT("F  Clapperboard takedown: instant if he is"),
+		TEXT("    stunned or unaware, slow if he sees you"),
+		TEXT("G  Megaphone (guards come to where you are)"),
+		TEXT("Guard shots: keep moving when the laser is red"),
 		TEXT("F1  Toggle guard vision cones")};
 
 	/* Returns the label shown above a guard for its state */
@@ -98,16 +109,17 @@ void ABacklotHUD::DrawHUD()
 	}
 	DrawGuardMeters();
 	DrawGrappleMarker(*Director);
-	DrawReelInPrompt(*Director);
+	DrawGuardGrapplePrompt(*Director);
+	DrawMegaphoneRings(*Director);
 	DrawTakedownPrompt(*Director);
 	DrawWorldPopups();
 	DrawScreenFlashes(*Director);
 	DrawHealth(*Director);
-	DrawFlashCooldown(*Director);
-	DrawMegaphoneCooldown(*Director);
+	DrawToolCooldowns(*Director);
 	DrawZoneName(*GameState);
 	DrawUpload(*GameState, *Director);
-	DrawCameraRigPrompt(*Director);
+	DrawStruggle(*Director);
+	DrawTommyGun(*Director);
 	DrawCrosshair();
 	DrawCenterMessage();
 	if (GameState->IsControlsHelpVisible())
@@ -170,8 +182,11 @@ void ABacklotHUD::DrawGrappleMarker(
 	}
 	const float HalfSize{26.0f};
 	const float LineThickness{3.0f};
-	const FLinearColor MarkerColor{
-		BacklotHUDConstants::WarnColor};
+	const bool bIsReady{Director.GetGrappleComponent()
+		->GetCooldownFractionRemaining() <= 0.0f};
+	const FLinearColor MarkerColor{bIsReady
+		? BacklotHUDConstants::WarnColor
+		: BacklotHUDConstants::BarBackColor};
 	const FVector2D TopLeft{
 		ScreenPosition - FVector2D{HalfSize, HalfSize}};
 	const float FullSize{HalfSize * 2.0f};
@@ -183,24 +198,82 @@ void ABacklotHUD::DrawGrappleMarker(
 		FullSize);
 	DrawRect(MarkerColor, TopLeft.X + FullSize, TopLeft.Y,
 		LineThickness, FullSize);
-	DrawCenteredLabel(TEXT("[E] GRAPPLE"),
-		ScreenPosition + FVector2D{0.0f, HalfSize + 14.0f},
-		MarkerColor, 1.2f);
+	if (bIsReady)
+	{
+		DrawCenteredLabel(TEXT("[E] GRAPPLE"),
+			ScreenPosition + FVector2D{0.0f, HalfSize + 14.0f},
+			MarkerColor, 1.2f);
+	}
 }
 
-void ABacklotHUD::DrawReelInPrompt(
+void ABacklotHUD::DrawGuardGrapplePrompt(
 	const ADirectorCharacter& Director)
 {
-	const AGuardCharacter* Guard{
-		Director.GetGrappleComponent()->FindPullableGuard()};
+	const UGrappleComponent* Grapple{
+		Director.GetGrappleComponent()};
+	const AGuardCharacter* Guard{Grapple->GetTargetedGuard()};
 	FVector2D ScreenPosition;
-	if (!Guard || !ProjectToScreen(Guard->GetActorLocation()
+	const bool bCanZip{Guard
+		&& Grapple->GetCooldownFractionRemaining() <= 0.0f};
+	if (!bCanZip || !ProjectToScreen(Guard->GetActorLocation()
 		+ FVector{0.0f, 0.0f, 60.0f}, ScreenPosition))
 	{
 		return;
 	}
-	DrawCenteredLabel(TEXT("[E] REEL HIM IN"), ScreenPosition,
-		BacklotHUDConstants::WarnColor, 1.6f);
+	DrawCenteredLabel(Guard->IsStunned()
+		? TEXT("[E] ZIP IN AND CUT") : TEXT("[E] ZIP TO HIM"),
+		ScreenPosition, BacklotHUDConstants::WarnColor, 1.6f);
+}
+
+void ABacklotHUD::DrawMegaphoneRings(
+	const ADirectorCharacter& Director)
+{
+	using namespace BacklotHUDConstants;
+	const UMegaphoneComponent* Megaphone{
+		Director.GetMegaphoneComponent()};
+	const float RingAge{Megaphone->GetSecondsSinceLastNoise()
+		/ MegaphoneRingSeconds};
+	if (RingAge >= 1.0f)
+	{
+		return;
+	}
+	const float FullRadius{
+		UBacklotTuningSettings::Get().MegaphoneNoiseRadius};
+	const FVector RingCenter{Megaphone->GetLastNoiseLocation()
+		- FVector{0.0f, 0.0f, 80.0f}};
+	const FLinearColor RingColor{0.4f, 0.8f, 1.0f, 1.0f - RingAge};
+	for (const float RingScale : {1.0f, 0.66f, 0.33f})
+	{
+		DrawGroundRing(RingCenter,
+			FullRadius * RingAge * RingScale, RingColor);
+	}
+}
+
+void ABacklotHUD::DrawGroundRing(const FVector& Center,
+	float Radius, const FLinearColor& Color)
+{
+	using namespace BacklotHUDConstants;
+	const float SegmentAngle{2.0f * PI / RingSegmentCount};
+	FVector2D PreviousPoint{FVector2D::ZeroVector};
+	bool bIsPreviousVisible{false};
+	for (int32 PointIndex{0}; PointIndex <= RingSegmentCount;
+		++PointIndex)
+	{
+		const float Angle{SegmentAngle * PointIndex};
+		const FVector RingPoint{Center + FVector{
+			Radius * FMath::Cos(Angle),
+			Radius * FMath::Sin(Angle), 0.0f}};
+		FVector2D ScreenPoint;
+		const bool bIsVisible{
+			ProjectToScreen(RingPoint, ScreenPoint)};
+		if (bIsVisible && bIsPreviousVisible)
+		{
+			DrawLine(PreviousPoint.X, PreviousPoint.Y,
+				ScreenPoint.X, ScreenPoint.Y, Color, 3.0f);
+		}
+		PreviousPoint = ScreenPoint;
+		bIsPreviousVisible = bIsVisible;
+	}
 }
 
 void ABacklotHUD::DrawTakedownPrompt(
@@ -215,14 +288,18 @@ void ABacklotHUD::DrawTakedownPrompt(
 	{
 		return;
 	}
-	if (Opportunity.bWillSucceed)
+	if (Director.GetTakedownComponent()->IsStruggling())
+	{
+		return;
+	}
+	if (Opportunity.bIsInstant)
 	{
 		DrawCenteredLabel(TEXT("[F] CUT!"), ScreenPosition,
 			BacklotHUDConstants::GoodColor, 2.0f);
 		return;
 	}
-	DrawCenteredLabel(TEXT("[F] too risky - he sees you"),
-		ScreenPosition, BacklotHUDConstants::BadColor, 1.4f);
+	DrawCenteredLabel(TEXT("[F] CUT (slow - he sees you)"),
+		ScreenPosition, BacklotHUDConstants::WarnColor, 1.4f);
 }
 
 void ABacklotHUD::DrawWorldPopups()
@@ -269,40 +346,86 @@ void ABacklotHUD::DrawHealth(const ADirectorCharacter& Director)
 	}
 }
 
-void ABacklotHUD::DrawFlashCooldown(
+void ABacklotHUD::DrawToolCooldowns(
 	const ADirectorCharacter& Director)
 {
-	using namespace BacklotHUDConstants;
-	const float CooldownRemaining{
+	DrawToolCooldown(TEXT("FLASH [Q]"),
 		Director.GetCameraFlashComponent()
-			->GetCooldownFractionRemaining()};
-	const bool bIsReady{CooldownRemaining <= 0.0f};
-	const FVector2D LabelPosition{
-		ScreenMargin, ScreenMargin + 58.0f};
-	DrawLabel(bIsReady ? TEXT("FLASH [Q]  READY")
-		: TEXT("FLASH [Q]  recharging"),
+			->GetCooldownFractionRemaining(), 0);
+	DrawToolCooldown(TEXT("MEGAPHONE [G]"),
+		Director.GetMegaphoneComponent()
+			->GetCooldownFractionRemaining(), 1);
+	DrawToolCooldown(TEXT("GRAPPLE [E]"),
+		Director.GetGrappleComponent()
+			->GetCooldownFractionRemaining(), 2);
+}
+
+void ABacklotHUD::DrawToolCooldown(const FString& ToolName,
+	float CooldownFractionRemaining, int32 RowIndex)
+{
+	using namespace BacklotHUDConstants;
+	const float RowHeight{46.0f};
+	const bool bIsReady{CooldownFractionRemaining <= 0.0f};
+	const FVector2D LabelPosition{ScreenMargin,
+		ScreenMargin + 58.0f + RowIndex * RowHeight};
+	DrawLabel(ToolName + (bIsReady
+		? TEXT("  READY") : TEXT("  recharging")),
 		LabelPosition, bIsReady ? GoodColor : TextColor, 1.2f);
 	DrawBar(LabelPosition + FVector2D{0.0f, 24.0f},
-		FVector2D{154.0f, 12.0f}, 1.0f - CooldownRemaining,
+		FVector2D{154.0f, 12.0f}, 1.0f - CooldownFractionRemaining,
 		bIsReady ? GoodColor : WarnColor);
 }
 
-void ABacklotHUD::DrawMegaphoneCooldown(
-	const ADirectorCharacter& Director)
+void ABacklotHUD::DrawStruggle(const ADirectorCharacter& Director)
 {
 	using namespace BacklotHUDConstants;
-	const float CooldownRemaining{
-		Director.GetMegaphoneComponent()
-			->GetCooldownFractionRemaining()};
-	const bool bIsReady{CooldownRemaining <= 0.0f};
-	const FVector2D LabelPosition{
-		ScreenMargin, ScreenMargin + 104.0f};
-	DrawLabel(bIsReady ? TEXT("MEGAPHONE [G]  READY")
-		: TEXT("MEGAPHONE [G]  recharging"),
-		LabelPosition, bIsReady ? GoodColor : TextColor, 1.2f);
-	DrawBar(LabelPosition + FVector2D{0.0f, 24.0f},
-		FVector2D{154.0f, 12.0f}, 1.0f - CooldownRemaining,
-		bIsReady ? GoodColor : WarnColor);
+	const UTakedownComponent* Takedown{
+		Director.GetTakedownComponent()};
+	if (!Takedown->IsStruggling())
+	{
+		return;
+	}
+	const FVector2D BarSize{320.0f, 18.0f};
+	const FVector2D BarPosition{
+		Canvas->SizeX * 0.5f - BarSize.X * 0.5f,
+		Canvas->SizeY * 0.6f};
+	DrawBar(BarPosition, BarSize, Takedown->GetStruggleProgress(),
+		WarnColor);
+	DrawCenteredLabel(TEXT("CUTTING...  you cannot move"),
+		BarPosition + FVector2D{BarSize.X * 0.5f, -16.0f},
+		WarnColor, 1.4f);
+}
+
+void ABacklotHUD::DrawTommyGun(const ADirectorCharacter& Director)
+{
+	using namespace BacklotHUDConstants;
+	const UTommyGunComponent* TommyGun{
+		Director.GetTommyGunComponent()};
+	if (!TommyGun->IsEquipped())
+	{
+		return;
+	}
+	DrawLabel(TEXT("TOMMY GUN [Left mouse]"), FVector2D{
+		ScreenMargin, ScreenMargin + 200.0f}, GoodColor, 1.2f);
+	if (TommyGun->GetSecondsSinceLastHit() > HitMarkerSeconds)
+	{
+		return;
+	}
+	const FVector2D ScreenCenter{
+		Canvas->SizeX * 0.5f, Canvas->SizeY * 0.5f};
+	const float InnerOffset{6.0f};
+	const float OuterOffset{16.0f};
+	for (const FVector2D& Corner : {FVector2D{1.0f, 1.0f},
+		FVector2D{1.0f, -1.0f}, FVector2D{-1.0f, 1.0f},
+		FVector2D{-1.0f, -1.0f}})
+	{
+		const FVector2D LineStart{
+			ScreenCenter + Corner * InnerOffset};
+		const FVector2D LineEnd{
+			ScreenCenter + Corner * OuterOffset};
+		DrawLine(LineStart.X, LineStart.Y, LineEnd.X, LineEnd.Y,
+			BadColor, 3.0f);
+	}
 }
 
 void ABacklotHUD::DrawScreenFlashes(
@@ -374,30 +497,6 @@ void ABacklotHUD::DrawUpload(const ABacklotGameState& GameState,
 	}
 }
 
-void ABacklotHUD::DrawCameraRigPrompt(
-	const ADirectorCharacter& Director)
-{
-	using namespace BacklotHUDConstants;
-	const FVector2D PromptCenter{
-		Canvas->SizeX * 0.5f, Canvas->SizeY * 0.72f};
-	if (Director.IsMountedOnCameraRig())
-	{
-		DrawCenteredLabel(TEXT("CAMERA RIG   Left mouse: "
-			"spotlight stun    E: get off"),
-			PromptCenter, WarnColor, 1.6f);
-		return;
-	}
-	for (TActorIterator<ACameraRigTurret> RigIterator{GetWorld()};
-		RigIterator; ++RigIterator)
-	{
-		if (RigIterator->CanBeMountedFrom(
-			Director.GetActorLocation()))
-		{
-			DrawCenteredLabel(TEXT("[E] MOUNT THE CAMERA RIG"),
-				PromptCenter, GoodColor, 1.8f);
-		}
-	}
-}
 
 void ABacklotHUD::DrawControlsHelp()
 {

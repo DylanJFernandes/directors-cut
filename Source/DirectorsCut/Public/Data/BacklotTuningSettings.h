@@ -24,9 +24,13 @@ public:
 	virtual FName GetCategoryName() const override;
 
 	// Player
-	/* Ground speed while standing, in units per second */
+	/* Ground speed while walking, in units per second */
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Player")
-	float PlayerRunSpeed;
+	float PlayerWalkSpeed;
+
+	/* Ground speed while sprinting, in units per second */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Player")
+	float PlayerSprintSpeed;
 
 	/* Ground speed while crouched, in units per second */
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Player")
@@ -35,6 +39,13 @@ public:
 	/* Upward speed applied when the player jumps */
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Player")
 	float PlayerJumpVelocity;
+
+	/* How hard gravity pulls the player (1 = engine default,
+	   which feels floaty) */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Player",
+		meta = (ClampMin = "0.5", ClampMax = "4.0",
+			UIMin = "0.5", UIMax = "4.0"))
+	float PlayerGravityScale;
 
 	/* How much the player can steer while airborne (0 to 1) */
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Player")
@@ -47,6 +58,45 @@ public:
 	/* Degrees of camera turn per unit of mouse movement */
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Player")
 	float LookSensitivity;
+
+	// Slide
+	/* Speed the player has at the start of a slide */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Slide")
+	float SlideStartSpeed;
+
+	/* Speed lost per second while sliding */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Slide")
+	float SlideDeceleration;
+
+	/* The slide ends when the player is slower than this */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Slide")
+	float SlideEndSpeed;
+
+	/* The player must be at least this fast to start a slide */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Slide")
+	float SlideMinimumEntrySpeed;
+
+	/* Each slide chained onto the last starts this much slower
+	   (1 = chained slides never slow down) */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Slide",
+		meta = (ClampMin = "0.0", ClampMax = "1.0",
+			UIMin = "0.0", UIMax = "1.0"))
+	float SlideChainSpeedMultiplier;
+
+	/* Seconds without sliding before the chain penalty resets */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Slide")
+	float SlideChainResetSeconds;
+
+	/* Extra forward speed for sliding off an edge */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Slide")
+	float SlideEdgeBoostSpeed;
+
+	/* How much of the normal steering works during a slide
+	   (0 to 1) */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Slide",
+		meta = (ClampMin = "0.0", ClampMax = "1.0",
+			UIMin = "0.0", UIMax = "1.0"))
+	float SlideSteeringFraction;
 
 	// Health
 	/* Number of guard hits the player can take */
@@ -96,14 +146,29 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Grapple")
 	float GrappleExitUpwardSpeed;
 
-	/* Farthest stunned guard the film reel can reel in */
-	UPROPERTY(Config, EditAnywhere, Category = "Custom|Grapple")
-	float GrapplePullRange;
+	/* Seconds after a grapple starts before the next one can,
+	   so the film reel cannot be spammed (0 = no cooldown) */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Grapple",
+		meta = (ClampMin = "0.0", ClampMax = "5.0",
+			UIMin = "0.0", UIMax = "5.0"))
+	float GrappleCooldownSeconds;
 
-	/* A stunned guard must be this close to screen center, in
-	   degrees, to be reeled in */
+	/* Farthest guard the film reel can zip the player to */
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Grapple")
-	float GrapplePullAimConeHalfAngleDegrees;
+	float GrappleGuardRange;
+
+	/* A guard must be this close to screen center, in degrees,
+	   to be grappled */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Grapple")
+	float GrappleGuardAimConeHalfAngleDegrees;
+
+	/* Forward speed the player keeps after zipping to a guard */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Grapple")
+	float GrappleGuardExitForwardSpeed;
+
+	/* Upward speed the player keeps after zipping to a guard */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Grapple")
+	float GrappleGuardExitUpwardSpeed;
 
 	// Guard Movement
 	/* Guard walking speed while patrolling */
@@ -172,7 +237,7 @@ public:
 		Category = "Custom|Guard Detection")
 	float GuardSuspiciousThreshold;
 
-	/* Distance at which guards hear a running player */
+	/* Distance at which guards hear a sprinting player */
 	UPROPERTY(Config, EditAnywhere,
 		Category = "Custom|Guard Detection")
 	float GuardFootstepHearingRadius;
@@ -230,6 +295,11 @@ public:
 		Category = "Custom|Guard Combat")
 	float GuardShotHitRadius;
 
+	/* Number of tommy gun hits a guard can take */
+	UPROPERTY(Config, EditAnywhere,
+		Category = "Custom|Guard Combat")
+	int32 GuardMaximumHealth;
+
 	// Camera Flash
 	/* How far the camera flash reaches */
 	UPROPERTY(Config, EditAnywhere,
@@ -270,9 +340,12 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Takedown")
 	float AerialTakedownMaximumDrop;
 
-	/* Speed the player is thrown back by a failed takedown */
-	UPROPERTY(Config, EditAnywhere, Category = "Custom|Takedown")
-	float FailedTakedownKnockbackSpeed;
+	/* Seconds a takedown takes on a guard who sees the player.
+	   The player cannot move during it. */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Takedown",
+		meta = (ClampMin = "0.1", ClampMax = "5.0",
+			UIMin = "0.1", UIMax = "5.0"))
+	float AlertTakedownSeconds;
 
 	/* Game speed during the dramatic cut after a takedown
 	   (1 = no slow motion) */
@@ -284,11 +357,8 @@ public:
 	float TakedownSlowMotionSeconds;
 
 	// Megaphone
-	/* How far away the megaphone noise can be placed */
-	UPROPERTY(Config, EditAnywhere, Category = "Custom|Megaphone")
-	float MegaphoneRange;
-
-	/* Guards within this distance of the noise investigate it */
+	/* Guards within this distance of the player come to look
+	   when the megaphone is used */
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Megaphone")
 	float MegaphoneNoiseRadius;
 
@@ -296,23 +366,27 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Megaphone")
 	float MegaphoneCooldownSeconds;
 
-	// Camera Rig
-	/* How far the camera rig's spotlight reaches */
-	UPROPERTY(Config, EditAnywhere, Category = "Custom|Camera Rig")
-	float TurretRange;
+	// Tommy Gun
+	/* Seconds between tommy gun shots while the trigger is
+	   held */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Tommy Gun")
+	float TommyGunFireIntervalSeconds;
 
-	/* A guard must be this close to screen center, in degrees,
-	   for the spotlight to hit him */
-	UPROPERTY(Config, EditAnywhere, Category = "Custom|Camera Rig")
-	float TurretAimConeHalfAngleDegrees;
+	/* How far a tommy gun shot reaches */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Tommy Gun")
+	float TommyGunRange;
 
-	/* Seconds a guard hit by the spotlight stays stunned */
-	UPROPERTY(Config, EditAnywhere, Category = "Custom|Camera Rig")
-	float TurretStunSeconds;
+	/* Half angle, in degrees, of the cone the shots spray in */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Tommy Gun")
+	float TommyGunSpreadHalfAngleDegrees;
 
-	/* Seconds between spotlight shots */
-	UPROPERTY(Config, EditAnywhere, Category = "Custom|Camera Rig")
-	float TurretFireIntervalSeconds;
+	/* How close a shot must pass to a guard to hit him */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Tommy Gun")
+	float TommyGunHitRadius;
+
+	/* Distance at which the floating tommy gun is picked up */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Tommy Gun")
+	float TommyGunPickupRadius;
 
 	// Upload
 	/* Seconds of uploading needed to win */

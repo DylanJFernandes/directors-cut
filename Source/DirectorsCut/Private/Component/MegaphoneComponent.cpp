@@ -4,8 +4,7 @@
 #include "Data/BacklotTuningSettings.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
-#include "GameFramework/Controller.h"
-#include "GameFramework/Pawn.h"
+#include "Game/BacklotSoundLibrary.h"
 
 UMegaphoneComponent::UMegaphoneComponent()
 	: LastNoiseTimeSeconds{-1000.0f},
@@ -21,32 +20,10 @@ bool UMegaphoneComponent::TryMakeNoise()
 		return false;
 	}
 	LastNoiseTimeSeconds = GetWorld()->GetTimeSeconds();
-	LastNoiseLocation = FindAimedLocation();
+	LastNoiseLocation = GetOwner()->GetActorLocation();
+	BacklotSoundLibrary::PlayMegaphone(this, LastNoiseLocation);
 	AlertGuardsNearNoise(LastNoiseLocation);
 	return true;
-}
-
-FVector UMegaphoneComponent::FindAimedLocation() const
-{
-	const APawn* OwnerPawn{Cast<APawn>(GetOwner())};
-	if (!OwnerPawn || !OwnerPawn->GetController())
-	{
-		return GetOwner()->GetActorLocation();
-	}
-	FVector ViewLocation;
-	FRotator ViewRotation;
-	OwnerPawn->GetController()->GetPlayerViewPoint(ViewLocation,
-		ViewRotation);
-	const FVector RangeEnd{ViewLocation + ViewRotation.Vector()
-		* UBacklotTuningSettings::Get().MegaphoneRange};
-
-	FCollisionQueryParams QueryParams{
-		TEXT("MegaphoneAim"), false, GetOwner()};
-	FHitResult Hit;
-	const bool bHitSomething{
-		GetWorld()->LineTraceSingleByChannel(Hit, ViewLocation,
-			RangeEnd, ECC_Visibility, QueryParams)};
-	return bHitSomething ? Hit.ImpactPoint : RangeEnd;
 }
 
 int32 UMegaphoneComponent::AlertGuardsNearNoise(
@@ -80,4 +57,10 @@ float UMegaphoneComponent::GetCooldownFractionRemaining() const
 FVector UMegaphoneComponent::GetLastNoiseLocation() const
 {
 	return LastNoiseLocation;
+}
+
+float UMegaphoneComponent::GetSecondsSinceLastNoise() const
+{
+	return static_cast<float>(
+		GetWorld()->GetTimeSeconds() - LastNoiseTimeSeconds);
 }

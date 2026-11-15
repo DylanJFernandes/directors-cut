@@ -24,7 +24,7 @@ struct FWorldPopup
 	float StartTimeSeconds{0.0f};
 };
 
-/* The whole HUD, drawn on the canvas: health, flash cooldown,
+/* The whole HUD, drawn on the canvas: health, tool cooldowns,
    zone name, upload bar, guard detection meters, the grapple
    target marker, prompts, popups and the win screen. */
 UCLASS()
@@ -57,8 +57,16 @@ private:
 	/* Marks the hook point E would grapple to */
 	void DrawGrappleMarker(const ADirectorCharacter& Director);
 
-	/* Marks the stunned guard E would reel in */
-	void DrawReelInPrompt(const ADirectorCharacter& Director);
+	/* Marks the guard E would zip the director to */
+	void DrawGuardGrapplePrompt(
+		const ADirectorCharacter& Director);
+
+	/* Draws the sound rings spreading from a megaphone shout */
+	void DrawMegaphoneRings(const ADirectorCharacter& Director);
+
+	/* Draws one ring of the given radius flat on the ground */
+	void DrawGroundRing(const FVector& Center, float Radius,
+		const FLinearColor& Color);
 
 	/* Shows the takedown prompt on the guard in reach */
 	void DrawTakedownPrompt(const ADirectorCharacter& Director);
@@ -70,11 +78,20 @@ private:
 	/* Draws the health pips */
 	void DrawHealth(const ADirectorCharacter& Director);
 
-	/* Draws the camera flash cooldown bar */
-	void DrawFlashCooldown(const ADirectorCharacter& Director);
+	/* Draws the cooldown bars of the flash, megaphone and
+	   grapple */
+	void DrawToolCooldowns(const ADirectorCharacter& Director);
 
-	/* Draws the megaphone cooldown bar */
-	void DrawMegaphoneCooldown(const ADirectorCharacter& Director);
+	/* Draws one tool's name and cooldown bar in the given row
+	   of the top left corner */
+	void DrawToolCooldown(const FString& ToolName,
+		float CooldownFractionRemaining, int32 RowIndex);
+
+	/* Draws the progress of a slow takedown */
+	void DrawStruggle(const ADirectorCharacter& Director);
+
+	/* Draws the tommy gun reminder and its hit marker */
+	void DrawTommyGun(const ADirectorCharacter& Director);
 
 	/* Whites the screen out briefly after a flash and tints it
 	   red after a hit */
@@ -87,8 +104,6 @@ private:
 	void DrawUpload(const ABacklotGameState& GameState,
 		const ADirectorCharacter& Director);
 
-	/* Shows how to mount or use the camera rig */
-	void DrawCameraRigPrompt(const ADirectorCharacter& Director);
 
 	/* Lists the controls */
 	void DrawControlsHelp();
