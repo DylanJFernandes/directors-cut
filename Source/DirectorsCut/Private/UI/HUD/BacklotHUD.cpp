@@ -20,7 +20,11 @@
 namespace BacklotHUDConstants
 {
 	/* Distance from the screen edge to the corner elements */
-	constexpr float ScreenMargin{40.0f};
+	constexpr float ScreenMargin{24.0f};
+	constexpr float StatusWidth{234.0f};
+	constexpr float StatusHeight{176.0f};
+	constexpr float PanelInset{14.0f};
+	constexpr float LabelScale{0.85f};
 
 	/* Guards farther than this do not show a meter */
 	constexpr float GuardMeterMaximumDistance{4000.0f};
@@ -44,11 +48,14 @@ namespace BacklotHUDConstants
 	/* Seconds the tommy gun hit marker stays up */
 	constexpr float HitMarkerSeconds{0.08f};
 
-	const FLinearColor BarBackColor{0.0f, 0.0f, 0.0f, 0.6f};
-	const FLinearColor TextColor{1.0f, 1.0f, 1.0f};
-	const FLinearColor GoodColor{0.3f, 1.0f, 0.4f};
-	const FLinearColor WarnColor{1.0f, 0.85f, 0.1f};
-	const FLinearColor BadColor{1.0f, 0.2f, 0.2f};
+	const FLinearColor PanelColor{0.032f, 0.030f, 0.034f, 0.96f};
+	const FLinearColor BarBackColor{0.10f, 0.087f, 0.075f, 0.95f};
+	const FLinearColor RuleColor{0.39f, 0.30f, 0.19f};
+	const FLinearColor TextColor{0.95f, 0.89f, 0.75f};
+	const FLinearColor MutedColor{0.73f, 0.67f, 0.56f};
+	const FLinearColor GoodColor{0.71f, 0.81f, 0.69f};
+	const FLinearColor WarnColor{0.87f, 0.68f, 0.42f};
+	const FLinearColor BadColor{0.96f, 0.47f, 0.39f};
 
 	/* Lines of the controls list */
 	const TArray<FString> ControlsLines{
@@ -104,7 +111,12 @@ void ABacklotHUD::DrawHUD()
 	}
 	if (GameState->IsGameWon())
 	{
-		DrawWinScreen();
+		DrawWinScreen(*GameState);
+		return;
+	}
+	if (GameState->IsGameLost())
+	{
+		DrawLoseScreen();
 		return;
 	}
 	DrawGuardMeters();
@@ -114,7 +126,13 @@ void ABacklotHUD::DrawHUD()
 	DrawTakedownPrompt(*Director);
 	DrawWorldPopups();
 	DrawScreenFlashes(*Director);
+	const FVector2D StatusPosition{BacklotHUDConstants::ScreenMargin,
+		BacklotHUDConstants::ScreenMargin};
+	DrawDecoPanel(StatusPosition,
+		FVector2D{BacklotHUDConstants::StatusWidth,
+			BacklotHUDConstants::StatusHeight});
 	DrawHealth(*Director);
+	DrawTakes(*GameState);
 	DrawToolCooldowns(*Director);
 	DrawZoneName(*GameState);
 	DrawUpload(*GameState, *Director);
@@ -331,49 +349,81 @@ void ABacklotHUD::DrawHealth(const ADirectorCharacter& Director)
 	using namespace BacklotHUDConstants;
 	const UDirectorHealthComponent* Health{
 		Director.GetHealthComponent()};
-	const FVector2D PipSize{46.0f, 20.0f};
-	const float PipSpacing{8.0f};
-	DrawLabel(TEXT("HEALTH"),
-		FVector2D{ScreenMargin, ScreenMargin}, TextColor, 1.2f);
-	for (int32 PipIndex{0}; PipIndex < Health->GetMaximumHealth();
-		++PipIndex)
+	const FVector2D Position{
+		ScreenMargin + PanelInset, ScreenMargin + 9.0f};
+	DrawLabel(TEXT("HEALTH"), Position, MutedColor, LabelScale);
+
+	const int32 MaximumHealth{FMath::Max(1, Health->GetMaximumHealth())};
+	const float PipPitch{118.0f / MaximumHealth};
+	const float PipWidth{PipPitch * 0.82f};
+	for (int32 PipIndex{0}; PipIndex < MaximumHealth; ++PipIndex)
 	{
-		const bool bIsFilled{
-			PipIndex < Health->GetCurrentHealth()};
+		const bool bIsFilled{PipIndex < Health->GetCurrentHealth()};
+		const float PipX{static_cast<float>(Position.X)
+			+ PipIndex * PipPitch};
+		const float PipY{static_cast<float>(Position.Y) + 26.0f};
+		DrawRect(RuleColor, PipX, PipY, PipWidth, 9.0f);
 		DrawRect(bIsFilled ? BadColor : BarBackColor,
-			ScreenMargin + PipIndex * (PipSize.X + PipSpacing),
-			ScreenMargin + 24.0f, PipSize.X, PipSize.Y);
+			PipX + PipWidth * 0.08f, PipY + 1.0f,
+			PipWidth * 0.84f, 7.0f);
 	}
+	DrawRect(RuleColor, Position.X, ScreenMargin + 49.0f,
+		StatusWidth - PanelInset * 2.0f, 1.0f);
+}
+
+void ABacklotHUD::DrawTakes(const ABacklotGameState& GameState)
+{
+	using namespace BacklotHUDConstants;
+	const int32 TakesRemaining{GameState.GetTakesRemaining()};
+	const FVector2D Position{ScreenMargin + 172.0f, ScreenMargin};
+	DrawCenteredLabel(TEXT("TAKES"), Position + FVector2D{0.0f, 17.0f},
+		MutedColor, LabelScale);
+	DrawCenteredLabel(FString::FromInt(TakesRemaining),
+		Position + FVector2D{0.0f, 34.0f},
+		TakesRemaining > 1 ? TextColor : BadColor, 1.25f);
+	DrawRect(RuleColor, ScreenMargin + 139.0f, ScreenMargin + 11.0f,
+		1.0f, 29.0f);
 }
 
 void ABacklotHUD::DrawToolCooldowns(
 	const ADirectorCharacter& Director)
 {
-	DrawToolCooldown(TEXT("FLASH [Q]"),
+	DrawToolCooldown(TEXT("FLASH"), TEXT("Q"),
 		Director.GetCameraFlashComponent()
 			->GetCooldownFractionRemaining(), 0);
-	DrawToolCooldown(TEXT("MEGAPHONE [G]"),
+	DrawToolCooldown(TEXT("MEGAPHONE"), TEXT("G"),
 		Director.GetMegaphoneComponent()
 			->GetCooldownFractionRemaining(), 1);
-	DrawToolCooldown(TEXT("GRAPPLE [E]"),
+	DrawToolCooldown(TEXT("GRAPPLE"), TEXT("E"),
 		Director.GetGrappleComponent()
 			->GetCooldownFractionRemaining(), 2);
 }
 
 void ABacklotHUD::DrawToolCooldown(const FString& ToolName,
-	float CooldownFractionRemaining, int32 RowIndex)
+	const FString& Key, float CooldownFractionRemaining, int32 RowIndex)
 {
 	using namespace BacklotHUDConstants;
-	const float RowHeight{46.0f};
+	const FVector2D Position{ScreenMargin + PanelInset,
+		ScreenMargin + 59.0f + RowIndex * 37.0f};
 	const bool bIsReady{CooldownFractionRemaining <= 0.0f};
-	const FVector2D LabelPosition{ScreenMargin,
-		ScreenMargin + 58.0f + RowIndex * RowHeight};
-	DrawLabel(ToolName + (bIsReady
-		? TEXT("  READY") : TEXT("  recharging")),
-		LabelPosition, bIsReady ? GoodColor : TextColor, 1.2f);
-	DrawBar(LabelPosition + FVector2D{0.0f, 24.0f},
-		FVector2D{154.0f, 12.0f}, 1.0f - CooldownFractionRemaining,
-		bIsReady ? GoodColor : WarnColor);
+	DrawRect(RuleColor, Position.X, Position.Y, 22.0f, 22.0f);
+	DrawRect(BarBackColor, Position.X + 1.0f, Position.Y + 1.0f,
+		20.0f, 20.0f);
+	DrawCenteredLabel(Key, Position + FVector2D{11.0f, 11.0f},
+		WarnColor, 0.95f);
+	DrawLabel(ToolName, Position + FVector2D{31.0f, 1.0f},
+		TextColor, 0.96f);
+	const FString Status{bIsReady ? TEXT("READY") : TEXT("RECHARGING")};
+	float StatusWidthPixels{};
+	float StatusHeightPixels{};
+	GetTextSize(Status, StatusWidthPixels, StatusHeightPixels,
+		GEngine->GetMediumFont(), LabelScale);
+	DrawLabel(Status, Position + FVector2D{
+		StatusWidth - PanelInset * 2.0f - StatusWidthPixels, 2.0f},
+		bIsReady ? GoodColor : WarnColor, LabelScale);
+	DrawBar(Position + FVector2D{31.0f, 23.0f},
+		FVector2D{StatusWidth - PanelInset * 2.0f - 31.0f, 2.0f},
+		1.0f - CooldownFractionRemaining, bIsReady ? GoodColor : WarnColor);
 }
 
 void ABacklotHUD::DrawStruggle(const ADirectorCharacter& Director)
@@ -385,10 +435,12 @@ void ABacklotHUD::DrawStruggle(const ADirectorCharacter& Director)
 	{
 		return;
 	}
-	const FVector2D BarSize{320.0f, 18.0f};
+	const FVector2D BarSize{300.0f, 4.0f};
 	const FVector2D BarPosition{
 		Canvas->SizeX * 0.5f - BarSize.X * 0.5f,
 		Canvas->SizeY * 0.6f};
+	DrawDecoPanel(BarPosition - FVector2D{15.0f, 32.0f},
+		BarSize + FVector2D{30.0f, 44.0f});
 	DrawBar(BarPosition, BarSize, Takedown->GetStruggleProgress(),
 		WarnColor);
 	DrawCenteredLabel(TEXT("CUTTING...  you cannot move"),
@@ -406,7 +458,7 @@ void ABacklotHUD::DrawTommyGun(const ADirectorCharacter& Director)
 		return;
 	}
 	DrawLabel(TEXT("TOMMY GUN [Left mouse]"), FVector2D{
-		ScreenMargin, ScreenMargin + 200.0f}, GoodColor, 1.2f);
+		ScreenMargin, ScreenMargin + StatusHeight + 10.0f}, TextColor, 1.0f);
 	if (TommyGun->GetSecondsSinceLastHit() > HitMarkerSeconds)
 	{
 		return;
@@ -455,24 +507,46 @@ void ABacklotHUD::DrawScreenFlashes(
 
 void ABacklotHUD::DrawZoneName(const ABacklotGameState& GameState)
 {
-	DrawCenteredLabel(GameState.GetCurrentZoneName().ToUpper(),
-		FVector2D{Canvas->SizeX * 0.5f,
-			BacklotHUDConstants::ScreenMargin + 10.0f},
-		BacklotHUDConstants::TextColor, 2.0f);
+	using namespace BacklotHUDConstants;
+	const FString ZoneName{GameState.GetCurrentZoneName().ToUpper()};
+	if (ZoneName.IsEmpty())
+	{
+		return;
+	}
+	float Width{};
+	float Height{};
+	GetTextSize(ZoneName, Width, Height, GEngine->GetMediumFont(), 1.45f);
+	const float AvailableWidth{FMath::Max(80.0f,
+		Canvas->SizeX - 2.0f * (ScreenMargin + StatusWidth + 12.0f))};
+	const float Scale{1.45f * FMath::Min(1.0f,
+		(AvailableWidth - 32.0f) / FMath::Max(Width, 1.0f))};
+	const FVector2D Size{
+		FMath::Min(AvailableWidth, FMath::Max(Width + 40.0f, 166.0f)),
+		38.0f};
+	const FVector2D Position{Canvas->SizeX * 0.5f - Size.X * 0.5f,
+		ScreenMargin};
+	DrawDecoPanel(Position, Size);
+	DrawCenteredLabel(ZoneName, Position + Size * 0.5f, TextColor, Scale);
 }
 
 void ABacklotHUD::DrawUpload(const ABacklotGameState& GameState,
 	const ADirectorCharacter& Director)
 {
 	using namespace BacklotHUDConstants;
-	const FVector2D BarSize{520.0f, 26.0f};
+	const FVector2D BarSize{
+		FMath::Min(440.0f, Canvas->SizeX - 2.0f * ScreenMargin - 30.0f),
+		4.0f};
 	const FVector2D BarPosition{
 		Canvas->SizeX * 0.5f - BarSize.X * 0.5f,
-		ScreenMargin + 70.0f};
+		FMath::Max(ScreenMargin + 82.0f,
+			Canvas->SizeX < 1024 ? ScreenMargin + StatusHeight + 42.0f
+				: 0.0f)};
 	if (GameState.IsUploadActive())
 	{
 		const bool bIsPaused{GameState.IsUploadPaused()};
 		const float Progress{GameState.GetUploadProgress()};
+		DrawDecoPanel(BarPosition - FVector2D{15.0f, 32.0f},
+			BarSize + FVector2D{30.0f, 44.0f});
 		DrawBar(BarPosition, BarSize, Progress,
 			bIsPaused ? BadColor : GoodColor);
 		DrawCenteredLabel(bIsPaused
@@ -480,7 +554,7 @@ void ABacklotHUD::DrawUpload(const ABacklotGameState& GameState,
 			: FString::Printf(TEXT("UPLOADING THE FILM  %d%%"),
 				FMath::FloorToInt32(Progress * 100.0f)),
 			BarPosition + FVector2D{BarSize.X * 0.5f, -16.0f},
-			bIsPaused ? BadColor : TextColor, 1.4f);
+			bIsPaused ? BadColor : TextColor, 1.05f);
 		return;
 	}
 	for (TActorIterator<AUploadTerminal> TerminalIterator{
@@ -501,19 +575,33 @@ void ABacklotHUD::DrawUpload(const ABacklotGameState& GameState,
 void ABacklotHUD::DrawControlsHelp()
 {
 	using namespace BacklotHUDConstants;
-	const float LineHeight{24.0f};
-	const float PanelWidth{470.0f};
-	const FVector2D PanelPosition{
-		Canvas->SizeX - PanelWidth - ScreenMargin, ScreenMargin};
-	DrawRect(BarBackColor, PanelPosition.X - 12.0f,
-		PanelPosition.Y - 8.0f, PanelWidth + 24.0f,
-		ControlsLines.Num() * LineHeight + 16.0f);
-	for (int32 LineIndex{0}; LineIndex < ControlsLines.Num();
-		++LineIndex)
+	float LongestLineWidth{0.0f};
+	for (const FString& Line : ControlsLines)
 	{
-		DrawLabel(ControlsLines[LineIndex], PanelPosition
-			+ FVector2D{0.0f, LineIndex * LineHeight},
-			LineIndex == 0 ? WarnColor : TextColor, 1.2f);
+		float Width{};
+		float Height{};
+		GetTextSize(Line, Width, Height, GEngine->GetMediumFont(), 1.0f);
+		LongestLineWidth = FMath::Max(LongestLineWidth, Width);
+	}
+
+	const float PanelWidth{FMath::Min(LongestLineWidth + PanelInset * 2.0f,
+		Canvas->SizeX * 0.42f)};
+	const float TextScale{FMath::Min(1.0f,
+		(PanelWidth - PanelInset * 2.0f) / LongestLineWidth)};
+	const float LineHeight{20.0f * TextScale};
+	const FVector2D Position{Canvas->SizeX - PanelWidth - ScreenMargin,
+		ScreenMargin + 48.0f};
+	DrawDecoPanel(Position, FVector2D{PanelWidth,
+		ControlsLines.Num() * LineHeight + 31.0f});
+	DrawLabel(ControlsLines[0], Position + FVector2D{PanelInset, 8.0f},
+		WarnColor, 1.15f);
+	DrawRect(RuleColor, Position.X + PanelInset, Position.Y + 31.0f,
+		PanelWidth - PanelInset * 2.0f, 1.0f);
+	for (int32 LineIndex{1}; LineIndex < ControlsLines.Num(); ++LineIndex)
+	{
+		DrawLabel(ControlsLines[LineIndex], Position
+			+ FVector2D{PanelInset, 36.0f + (LineIndex - 1) * LineHeight},
+			TextColor, TextScale);
 	}
 }
 
@@ -530,20 +618,50 @@ void ABacklotHUD::DrawCenterMessage()
 		BacklotHUDConstants::BadColor, 2.6f);
 }
 
-void ABacklotHUD::DrawWinScreen()
+void ABacklotHUD::DrawWinScreen(const ABacklotGameState& GameState)
+{
+	using namespace BacklotHUDConstants;
+	const int32 TakesRemaining{GameState.GetTakesRemaining()};
+	DrawEndScreen(TEXT("THAT'S A WRAP!"),
+		TEXT("The director's cut is uploaded. You win."),
+		FString::Printf(TEXT("Wrapped with %d %s to spare"),
+			TakesRemaining,
+			TakesRemaining == 1 ? TEXT("take") : TEXT("takes")),
+		WarnColor);
+}
+
+void ABacklotHUD::DrawLoseScreen()
+{
+	using namespace BacklotHUDConstants;
+	DrawEndScreen(TEXT("GAME OVER"),
+		TEXT("CUT! The studio pulled the plug on your picture."),
+		TEXT("You ran out of takes"), BadColor);
+}
+
+void ABacklotHUD::DrawEndScreen(const FString& Title,
+	const FString& Subtitle, const FString& Detail,
+	const FLinearColor& TitleColor)
 {
 	using namespace BacklotHUDConstants;
 	DrawRect(FLinearColor{0.0f, 0.0f, 0.0f, 0.75f}, 0.0f, 0.0f,
 		Canvas->SizeX, Canvas->SizeY);
 	const FVector2D ScreenCenter{
 		Canvas->SizeX * 0.5f, Canvas->SizeY * 0.5f};
-	DrawCenteredLabel(TEXT("THAT'S A WRAP!"),
-		ScreenCenter - FVector2D{0.0f, 80.0f}, WarnColor, 6.0f);
-	DrawCenteredLabel(
-		TEXT("The director's cut is uploaded. You win."),
-		ScreenCenter + FVector2D{0.0f, 10.0f}, TextColor, 2.2f);
-	DrawCenteredLabel(TEXT("Press R to restart"),
-		ScreenCenter + FVector2D{0.0f, 70.0f}, GoodColor, 2.2f);
+	const FVector2D CardSize{
+		FMath::Min(640.0f, Canvas->SizeX - 2.0f * ScreenMargin), 244.0f};
+	DrawDecoPanel(ScreenCenter - CardSize * 0.5f, CardSize);
+	DrawCenteredLabel(Title,
+		ScreenCenter - FVector2D{0.0f, 64.0f}, TitleColor, 3.3f);
+	DrawRect(RuleColor, ScreenCenter.X - CardSize.X * 0.38f,
+		ScreenCenter.Y - 27.0f, CardSize.X * 0.76f, 1.0f);
+	DrawCenteredLabel(Subtitle,
+		ScreenCenter + FVector2D{0.0f, -1.0f}, TextColor, 1.35f);
+	DrawCenteredLabel(Detail,
+		ScreenCenter + FVector2D{0.0f, 24.0f}, MutedColor, 1.05f);
+	const FVector2D RestartSize{156.0f, 34.0f};
+	const FVector2D RestartCenter{ScreenCenter + FVector2D{0.0f, 79.0f}};
+	DrawDecoPanel(RestartCenter - RestartSize * 0.5f, RestartSize);
+	DrawCenteredLabel(TEXT("[R] RESTART"), RestartCenter, WarnColor, 1.0f);
 }
 
 void ABacklotHUD::DrawCrosshair()
@@ -552,6 +670,31 @@ void ABacklotHUD::DrawCrosshair()
 	DrawRect(FLinearColor{1.0f, 1.0f, 1.0f, 0.7f},
 		Canvas->SizeX * 0.5f - DotSize * 0.5f,
 		Canvas->SizeY * 0.5f - DotSize * 0.5f, DotSize, DotSize);
+}
+
+void ABacklotHUD::DrawDecoPanel(const FVector2D& Position,
+	const FVector2D& Size)
+{
+	using namespace BacklotHUDConstants;
+	constexpr float Corner{7.0f};
+	DrawRect(PanelColor, Position.X + Corner, Position.Y,
+		Size.X - Corner * 2.0f, Size.Y);
+	DrawRect(PanelColor, Position.X, Position.Y + Corner, Corner,
+		Size.Y - Corner * 2.0f);
+	DrawRect(PanelColor, Position.X + Size.X - Corner, Position.Y + Corner,
+		Corner, Size.Y - Corner * 2.0f);
+	for (float Y : {Position.Y, Position.Y + Size.Y - 1.0f})
+	{
+		DrawRect(RuleColor, Position.X + Corner, Y,
+			Size.X - 2.0f * Corner, 1.0f);
+		DrawRect(WarnColor, Position.X + Size.X * 0.5f - 17.0f,
+			Y, 34.0f, 1.0f);
+	}
+	for (float X : {Position.X, Position.X + Size.X - 1.0f})
+	{
+		DrawRect(RuleColor, X, Position.Y + Corner, 1.0f,
+			Size.Y - 2.0f * Corner);
+	}
 }
 
 void ABacklotHUD::DrawLabel(const FString& Text,

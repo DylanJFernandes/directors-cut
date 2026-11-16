@@ -5,7 +5,8 @@
 #include "BacklotGameState.generated.h"
 
 /* Shared state of the escape: the zone the player is in, how
-   far the upload has come, and whether the game is won */
+   far the upload has come, the takes left, and whether the
+   game is won or lost */
 UCLASS()
 class ABacklotGameState : public AGameStateBase
 {
@@ -58,6 +59,21 @@ public:
 	/* Returns whether the film was uploaded */
 	bool IsGameWon() const;
 
+	/* Spends one take. Returns whether any takes are left. */
+	bool UseTake();
+
+	/* Returns the takes the director has left */
+	int32 GetTakesRemaining() const;
+
+	/* Records that the director ran out of takes */
+	void MarkGameLost();
+
+	/* Returns whether the director ran out of takes */
+	bool IsGameLost() const;
+
+	/* Returns whether the run has ended, won or lost */
+	bool IsGameOver() const;
+
 	/* Switches the debug vision cones on or off */
 	void ToggleDebugVisionCones();
 
@@ -82,6 +98,12 @@ private:
 
 	/* Whether the film was uploaded */
 	bool bIsGameWon;
+
+	/* Takes the director has left */
+	int32 TakesRemaining;
+
+	/* Whether the director ran out of takes */
+	bool bIsGameLost;
 
 	/* Whether guards draw their vision cones */
 	bool bDrawDebugVisionCones;

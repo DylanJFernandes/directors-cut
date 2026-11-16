@@ -26,7 +26,7 @@ protected:
 	virtual void SetupInputComponent() override;
 
 private:
-	/* Restarts the run once the game has been won */
+	/* Restarts the run once the game is won or lost */
 	void HandleRestartPressed();
 
 	/* Switches the guard vision cones on or off */

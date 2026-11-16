@@ -21,6 +21,7 @@ UBacklotTuningSettings::UBacklotTuningSettings()
 	  HitInvulnerabilitySeconds{0.6f},
 	  HealthRegenerationDelaySeconds{6.0f},
 	  HealthRegenerationIntervalSeconds{4.0f},
+	  PlayerTakeCount{5},
 	  GrappleRange{2500.0f},
 	  GrappleAimConeHalfAngleDegrees{30.0f},
 	  GrappleTravelSpeed{2400.0f},

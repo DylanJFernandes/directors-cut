@@ -15,8 +15,10 @@ void ADirectorPlayerController::BeginPlay()
 void ADirectorPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
-	InputComponent->BindKey(EKeys::R, IE_Pressed, this,
-		&ADirectorPlayerController::HandleRestartPressed);
+	FInputKeyBinding& RestartBinding{InputComponent->BindKey(
+		EKeys::R, IE_Pressed, this,
+		&ADirectorPlayerController::HandleRestartPressed)};
+	RestartBinding.bExecuteWhenPaused = true;
 	InputComponent->BindKey(EKeys::F1, IE_Pressed, this,
 		&ADirectorPlayerController
 			::HandleToggleVisionConesPressed);
@@ -28,7 +30,7 @@ void ADirectorPlayerController::HandleRestartPressed()
 		GetWorld()->GetGameState<ABacklotGameState>()};
 	ABacklotGameMode* GameMode{
 		GetWorld()->GetAuthGameMode<ABacklotGameMode>()};
-	if (GameState && GameMode && GameState->IsGameWon())
+	if (GameState && GameMode && GameState->IsGameOver())
 	{
 		GameMode->RestartRun();
 	}

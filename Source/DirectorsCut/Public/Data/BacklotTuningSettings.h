@@ -115,6 +115,12 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Health")
 	float HealthRegenerationIntervalSeconds;
 
+	/* Times the director can be caught before the run is
+	   over. Each catch costs one take. */
+	UPROPERTY(Config, EditAnywhere, Category = "Custom|Health",
+		meta = (ClampMin = "1"))
+	int32 PlayerTakeCount;
+
 	// Grapple
 	/* Farthest hook point the film reel can reach */
 	UPROPERTY(Config, EditAnywhere, Category = "Custom|Grapple")

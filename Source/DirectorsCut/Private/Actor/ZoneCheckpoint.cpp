@@ -5,7 +5,9 @@
 #include "Game/BacklotGameMode.h"
 
 AZoneCheckpoint::AZoneCheckpoint()
-	: bShowsControlsHelp{false}
+	: ZoneName{TEXT("Zone")},
+	  bShowsControlsHelp{false},
+	  bStartsRun{false}
 {
 	PrimaryActorTick.bCanEverTick = false;
 
@@ -14,20 +16,9 @@ AZoneCheckpoint::AZoneCheckpoint()
 	SetRootComponent(TriggerBox);
 	TriggerBox->SetCollisionProfileName(TEXT("Trigger"));
 	TriggerBox->SetCanEverAffectNavigation(false);
+	TriggerBox->SetBoxExtent(FVector{300.0f, 1600.0f, 400.0f});
 	TriggerBox->OnComponentBeginOverlap.AddDynamic(this,
 		&AZoneCheckpoint::HandleTriggerBeginOverlap);
-}
-
-void AZoneCheckpoint::Configure(const FString& InZoneName,
-	const FVector& TriggerExtent)
-{
-	ZoneName = InZoneName;
-	TriggerBox->SetBoxExtent(TriggerExtent);
-}
-
-void AZoneCheckpoint::EnableControlsHelp()
-{
-	bShowsControlsHelp = true;
 }
 
 void AZoneCheckpoint::HandleTriggerBeginOverlap(
@@ -51,4 +42,9 @@ const FString& AZoneCheckpoint::GetZoneName() const
 bool AZoneCheckpoint::ShowsControlsHelp() const
 {
 	return bShowsControlsHelp;
+}
+
+bool AZoneCheckpoint::StartsRun() const
+{
+	return bStartsRun;
 }

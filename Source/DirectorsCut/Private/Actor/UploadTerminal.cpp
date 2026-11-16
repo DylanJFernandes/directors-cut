@@ -53,6 +53,19 @@ void AUploadTerminal::BeginPlay()
 	ScreenMesh->SetStaticMesh(GreyboxShapeLibrary::GetCubeMesh());
 	GreyboxShapeLibrary::ApplyGlowColor(ScreenMesh,
 		FLinearColor{0.1f, 1.0f, 0.4f});
+	BuildGuardSpawnLocations();
+}
+
+void AUploadTerminal::BuildGuardSpawnLocations()
+{
+	const FTransform PlacedTransform{GetActorRotation(),
+		GetActorLocation()};
+	GuardSpawnLocations.Reset();
+	for (const FVector& SpawnPoint : GuardSpawnPoints)
+	{
+		GuardSpawnLocations.Add(
+			PlacedTransform.TransformPosition(SpawnPoint));
+	}
 }
 
 void AUploadTerminal::Tick(float DeltaSeconds)
@@ -187,12 +200,6 @@ void AUploadTerminal::CompleteUpload()
 	{
 		GameMode->HandleUploadComplete();
 	}
-}
-
-void AUploadTerminal::SetGuardSpawnLocations(
-	const TArray<FVector>& InGuardSpawnLocations)
-{
-	GuardSpawnLocations = InGuardSpawnLocations;
 }
 
 bool AUploadTerminal::CanBeUsedFrom(

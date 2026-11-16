@@ -8,7 +8,8 @@ class ADirectorCharacter;
 class AZoneCheckpoint;
 
 /* Rules of the escape: checkpoints, what happens when the
-   director is caught, and winning by finishing the upload */
+   director is caught, losing by running out of takes, and
+   winning by finishing the upload */
 UCLASS()
 class ABacklotGameMode : public AGameModeBase
 {
@@ -18,14 +19,11 @@ public:
 	/* Sets the pawn, controller, HUD and game state classes */
 	ABacklotGameMode();
 
-	/* Puts the director at the first checkpoint once the level
-	   has been built */
-	void StartRunAt(const AZoneCheckpoint& FirstCheckpoint);
-
 	/* Makes a checkpoint the current zone and restart spot */
 	void ActivateCheckpoint(const AZoneCheckpoint& Checkpoint);
 
-	/* Sends the director back to the last checkpoint */
+	/* Spends a take and sends the director back to the last
+	   checkpoint, or ends the run when no takes are left */
 	void HandlePlayerCaught();
 
 	/* Wins the game */
@@ -35,13 +33,20 @@ public:
 	void RestartRun();
 
 protected:
-	/* Spawns the level builder if the map does not have one */
+	/* Makes the map's run start checkpoint the current zone */
 	virtual void BeginPlay() override;
 
 private:
+	/* Activates the checkpoint marked as the start of the run */
+	void ActivateRunStartCheckpoint();
+
 	/* Moves the director to the checkpoint and resets the
 	   guards and the upload */
 	void RestartFromCheckpoint();
+
+	/* Ends the run as lost and freezes the game behind the
+	   game over screen */
+	void LoseRun();
 
 	/* Returns every guard to the start of its patrol */
 	void ResetGuards() const;

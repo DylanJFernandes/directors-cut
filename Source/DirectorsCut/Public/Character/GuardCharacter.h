@@ -34,10 +34,6 @@ public:
 	/* Creates the guard's mesh, state marker and laser */
 	AGuardCharacter();
 
-	/* Sets the points this guard walks between */
-	void SetPatrolLocations(
-		const TArray<FVector>& InPatrolLocations);
-
 	/* Makes this guard return to hunting the player instead of
 	   giving up, as the upload wave guards do */
 	void MakeRelentless();
@@ -92,6 +88,10 @@ protected:
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
+	/* Turns the placed patrol points into world locations,
+	   starting from where the guard stands */
+	void BuildPatrolLocations();
+
 	// Detection
 	/* Fills or drains the detection meter and reacts to it */
 	void UpdateDetectionMeter(float DeltaSeconds);
@@ -245,7 +245,13 @@ private:
 	float StunSecondsRemaining;
 
 	// Patrol
-	/* Points this guard walks between */
+	/* Patrol points relative to where the guard is placed. The
+	   guard walks from its placed spot through each in turn. */
+	UPROPERTY(EditAnywhere, Category = "Custom|Patrol",
+		meta = (MakeEditWidget))
+	TArray<FVector> PatrolPoints;
+
+	/* World locations this guard walks between */
 	TArray<FVector> PatrolLocations;
 
 	/* Index of the patrol point being walked to */
