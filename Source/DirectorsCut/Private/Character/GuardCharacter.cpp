@@ -179,7 +179,26 @@ void AGuardCharacter::BeginPlay()
 	HealthRemaining =
 		UBacklotTuningSettings::Get().GuardMaximumHealth;
 	LastKnownPlayerLocation = GetActorLocation();
+	BuildPatrolLocations();
 	EnterState(EGuardState::Patrol);
+}
+
+void AGuardCharacter::BuildPatrolLocations()
+{
+	if (PatrolPoints.IsEmpty())
+	{
+		return;
+	}
+	const FTransform PlacedTransform{GetActorRotation(),
+		GetActorLocation()};
+	PatrolLocations.Reset();
+	PatrolLocations.Add(GetActorLocation());
+	for (const FVector& PatrolPoint : PatrolPoints)
+	{
+		PatrolLocations.Add(
+			PlacedTransform.TransformPosition(PatrolPoint));
+	}
+	PatrolLocationIndex = 0;
 }
 
 void AGuardCharacter::Tick(float DeltaSeconds)
@@ -693,13 +712,6 @@ void AGuardCharacter::DrawDebugVisionCone() const
 	}
 	DrawDebugLine(GetWorld(), PreviousPoint, FanOrigin, FanColor,
 		false, -1.0f, 0, 2.0f);
-}
-
-void AGuardCharacter::SetPatrolLocations(
-	const TArray<FVector>& InPatrolLocations)
-{
-	PatrolLocations = InPatrolLocations;
-	PatrolLocationIndex = 0;
 }
 
 void AGuardCharacter::MakeRelentless()

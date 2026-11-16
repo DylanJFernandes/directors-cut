@@ -5,6 +5,8 @@
 #include "DirectorCharacter.generated.h"
 
 class AGuardCharacter;
+class UAnimSequence;
+class UBlendSpace;
 class UBeamMeshComponent;
 class UCameraComponent;
 class UCameraFlashComponent;
@@ -15,6 +17,8 @@ class UInputAction;
 class UInputMappingContext;
 class UMegaphoneComponent;
 class UPointLightComponent;
+class USkeletalMesh;
+class USkeletalMeshComponent;
 class USpringArmComponent;
 class UTakedownComponent;
 class UTommyGunComponent;
@@ -74,12 +78,11 @@ protected:
 	virtual void SetupPlayerInputComponent(
 		UInputComponent* PlayerInputComponent) override;
 
-	/* Squashes the mesh so crouching reads without a crouch
-	   animation */
+	/* Applies the fallback crouch presentation when needed */
 	virtual void OnStartCrouch(float HalfHeightAdjust,
 		float ScaledHalfHeightAdjust) override;
 
-	/* Restores the mesh height after crouching */
+	/* Restores the fallback standing presentation */
 	virtual void OnEndCrouch(float HalfHeightAdjust,
 		float ScaledHalfHeightAdjust) override;
 
@@ -167,6 +170,23 @@ private:
 	   whether a terminal was used. */
 	bool TryUseUploadTerminal();
 
+	/* Creates the hand-held props and loads their animations */
+	void CreatePresentationComponents();
+
+	/* Updates the in-place blend space or current gesture */
+	void UpdateDirectorAnimation();
+
+	/* Starts the body and matching prop playback together */
+	void StartGesture(UAnimSequence* BodyAnimation,
+		USkeletalMeshComponent* Prop, UAnimSequence* PropAnimation,
+		float PlayRate);
+
+	/* Plays the appropriate clapboard gesture */
+	void PlayClapboard(bool bSweeping);
+
+	/* Clears the current gesture and hides its prop */
+	void ResetGesture();
+
 	/* Shows or hides the film reel tether */
 	void UpdateGrappleTether();
 
@@ -219,6 +239,51 @@ private:
 	/* Film reel tommy gun, hidden until it is picked up */
 	UPROPERTY(VisibleAnywhere, Category = "Custom|Components")
 	TObjectPtr<UTommyGunComponent> TommyGun;
+
+	/* Hand-held clapboard and reel, visible during their gestures */
+	UPROPERTY(VisibleAnywhere, Category = "Custom|Components")
+	TObjectPtr<USkeletalMeshComponent> Clapboard;
+
+	UPROPERTY(VisibleAnywhere, Category = "Custom|Components")
+	TObjectPtr<USkeletalMeshComponent> FilmReel;
+
+	/* Imported director and its directional locomotion */
+	UPROPERTY()
+	TObjectPtr<USkeletalMesh> DirectorMesh;
+
+	UPROPERTY()
+	TObjectPtr<UBlendSpace> StandingAnimation;
+
+	UPROPERTY()
+	TObjectPtr<UBlendSpace> CrouchAnimation;
+
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> FallingAnimation;
+
+	/* Body animation and matching tool animation for each action */
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> QuickCutAnimation;
+
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> SweepCutAnimation;
+
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> GrappleAnimation;
+
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> QuickClapAnimation;
+
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> SweepClapAnimation;
+
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> ReelAnimation;
+
+	UPROPERTY()
+	TObjectPtr<UAnimSequence> ActiveGesture;
+
+	/* Whether the imported rig and blend spaces are available */
+	bool bUsesDirectorPresentation;
 
 	// Input
 	/* Mapping context holding every key binding */

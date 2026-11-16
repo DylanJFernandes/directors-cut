@@ -1,6 +1,5 @@
 #include "Game/BacklotGameMode.h"
 
-#include "Actor/GreyboxLevelBuilder.h"
 #include "Actor/UploadTerminal.h"
 #include "Actor/ZoneCheckpoint.h"
 #include "Character/DirectorCharacter.h"
@@ -27,21 +26,20 @@ ABacklotGameMode::ABacklotGameMode()
 void ABacklotGameMode::BeginPlay()
 {
 	Super::BeginPlay();
-	const TActorIterator<AGreyboxLevelBuilder> BuilderIterator{
-		GetWorld()};
-	if (!BuilderIterator)
-	{
-		GetWorld()->SpawnActor<AGreyboxLevelBuilder>();
-	}
+	ActivateRunStartCheckpoint();
 }
 
-void ABacklotGameMode::StartRunAt(
-	const AZoneCheckpoint& FirstCheckpoint)
+void ABacklotGameMode::ActivateRunStartCheckpoint()
 {
-	ActivateCheckpoint(FirstCheckpoint);
-	if (ADirectorCharacter* Director{GetDirector()})
+	for (TActorIterator<AZoneCheckpoint> CheckpointIterator{
+			GetWorld()};
+		CheckpointIterator; ++CheckpointIterator)
 	{
-		Director->RespawnAt(CheckpointTransform);
+		if (CheckpointIterator->StartsRun())
+		{
+			ActivateCheckpoint(**CheckpointIterator);
+			return;
+		}
 	}
 }
 
@@ -66,8 +64,16 @@ void ABacklotGameMode::ActivateCheckpoint(
 
 void ABacklotGameMode::HandlePlayerCaught()
 {
-	if (bIsRestartQueued)
+	ABacklotGameState* BacklotGameState{
+		GetGameState<ABacklotGameState>()};
+	if (bIsRestartQueued || !BacklotGameState
+		|| BacklotGameState->IsGameOver())
 	{
+		return;
+	}
+	if (!BacklotGameState->UseTake())
+	{
+		LoseRun();
 		return;
 	}
 	bIsRestartQueued = true;
@@ -84,8 +90,24 @@ void ABacklotGameMode::RestartFromCheckpoint()
 	}
 	ResetUploadTerminals();
 	ResetGuards();
-	ShowCenterMessage(
-		TEXT("CAUGHT!  Back to the last checkpoint."));
+	const ABacklotGameState* BacklotGameState{
+		GetGameState<ABacklotGameState>()};
+	const int32 TakesRemaining{BacklotGameState
+		? BacklotGameState->GetTakesRemaining() : 0};
+	ShowCenterMessage(FString::Printf(
+		TEXT("CUT!  Back to your mark.  %d %s left."),
+		TakesRemaining,
+		TakesRemaining == 1 ? TEXT("take") : TEXT("takes")));
+}
+
+void ABacklotGameMode::LoseRun()
+{
+	if (ABacklotGameState* BacklotGameState{
+		GetGameState<ABacklotGameState>()})
+	{
+		BacklotGameState->MarkGameLost();
+	}
+	UGameplayStatics::SetGamePaused(this, true);
 }
 
 void ABacklotGameMode::ResetGuards() const

@@ -9,10 +9,11 @@ class AGuardCharacter;
 class UStaticMeshComponent;
 class UTextRenderComponent;
 
-/* The Editing Bay terminal. Starting it begins the upload of
-   the film; while it runs, guards arrive in growing waves from
-   the doors. The upload only advances while the director stays
-   close, and finishing it wins the game. */
+/* The upload terminal at the end of the run. Starting it
+   begins the upload of the film; while it runs, guards arrive
+   in growing waves from the spawn points. The upload only
+   advances while the director stays close, and finishing it
+   wins the game. */
 UCLASS()
 class AUploadTerminal : public AActor
 {
@@ -21,10 +22,6 @@ class AUploadTerminal : public AActor
 public:
 	/* Creates the terminal's desk, screen and label */
 	AUploadTerminal();
-
-	/* Sets where wave guards appear */
-	void SetGuardSpawnLocations(
-		const TArray<FVector>& InGuardSpawnLocations);
 
 	/* Returns whether E would start the upload from there */
 	bool CanBeUsedFrom(const FVector& UserLocation) const;
@@ -44,6 +41,9 @@ protected:
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
+	/* Turns the placed spawn points into world locations */
+	void BuildGuardSpawnLocations();
+
 	/* Adds progress while the director is close enough */
 	void AdvanceUpload(float DeltaSeconds);
 
@@ -99,7 +99,12 @@ private:
 	/* Number of waves spawned so far */
 	int32 SpawnedWaveCount;
 
-	/* Where wave guards appear */
+	/* Where wave guards appear, relative to the terminal */
+	UPROPERTY(EditAnywhere, Category = "Custom|Waves",
+		meta = (MakeEditWidget))
+	TArray<FVector> GuardSpawnPoints;
+
+	/* World locations where wave guards appear */
 	TArray<FVector> GuardSpawnLocations;
 
 	/* Guards spawned by this terminal's waves */

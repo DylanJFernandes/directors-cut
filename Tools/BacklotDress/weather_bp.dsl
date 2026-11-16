@@ -1,0 +1,41 @@
+; Follow the active camera so the rain volume and sky bolt stay with the player
+(event `self.ReceiveTick`
+  (params (DeltaSeconds))
+  (bind pcm (`GameplayStatics.GetPlayerCameraManager` 0))
+  (if (`KismetSystemLibrary.IsValid` pcm)
+    (bind cam (`PlayerCameraManager.GetCameraLocation` pcm))
+    (`self.K2_SetActorLocation` :`NewLocation` cam :`bSweep` false :`bTeleport` true)
+    (`SceneComponent.SetVisibility` (`self.Rain`) (> (.z cam) -80.0) false)))
+
+(event `self.ReceiveBeginPlay`
+  (`KismetSystemLibrary.Delay` (`KismetMathLibrary.RandomFloatInRange` 3.0 8.0))
+  (`self.Strike`))
+
+; One lightning strike: aim bolt and flash light, flicker, thunder after a gap, then queue the next
+(event `Strike`
+  (set `self.StrikeYaw` (`KismetMathLibrary.RandomFloatInRange` 0.0 360.0))
+  (set `self.StrikePower` (* (`self.FlashLux`) (`KismetMathLibrary.RandomFloatInRange` 0.6 1.25)))
+  (`SceneComponent.K2_SetRelativeRotation` (`self.BoltPivot`) (`KismetMathLibrary.MakeRotator` 0.0 0.0 (`self.StrikeYaw`)) false false)
+  (`SceneComponent.K2_SetWorldRotation` (`self.LightningLight`) (`KismetMathLibrary.MakeRotator` 0.0 -40.0 (+ (`self.StrikeYaw`) 180.0)) false false)
+  (`PrimitiveComponent.SetMaterial` (`self.Bolt`) 0 (select `int` (`KismetMathLibrary.RandomIntegerInRange` 0 2) :!type "MaterialInterface Object Reference" :`0` "/Game/Environment/Weather/MI_LightningBolt_01.MI_LightningBolt_01" :`1` "/Game/Environment/Weather/MI_LightningBolt_02.MI_LightningBolt_02" :`2` "/Game/Environment/Weather/MI_LightningBolt_03.MI_LightningBolt_03"))
+  (`LightComponent.SetIntensity` (`self.LightningLight`) (`self.StrikePower`))
+  (`KismetMaterialLibrary.SetScalarParameterValue` "/Game/Environment/Weather/MPC_Weather.MPC_Weather" "Flash" 1.0)
+  (`KismetSystemLibrary.Delay` 0.06)
+  (`LightComponent.SetIntensity` (`self.LightningLight`) (* (`self.StrikePower`) 0.08))
+  (`KismetMaterialLibrary.SetScalarParameterValue` "/Game/Environment/Weather/MPC_Weather.MPC_Weather" "Flash" 0.1)
+  (`KismetSystemLibrary.Delay` 0.08)
+  (`LightComponent.SetIntensity` (`self.LightningLight`) (* (`self.StrikePower`) 0.75))
+  (`KismetMaterialLibrary.SetScalarParameterValue` "/Game/Environment/Weather/MPC_Weather.MPC_Weather" "Flash" 0.85)
+  (`KismetSystemLibrary.Delay` 0.12)
+  (`LightComponent.SetIntensity` (`self.LightningLight`) (* (`self.StrikePower`) 0.25))
+  (`KismetMaterialLibrary.SetScalarParameterValue` "/Game/Environment/Weather/MPC_Weather.MPC_Weather" "Flash" 0.3)
+  (`KismetSystemLibrary.Delay` 0.05)
+  (`LightComponent.SetIntensity` (`self.LightningLight`) (`self.StrikePower`))
+  (`KismetMaterialLibrary.SetScalarParameterValue` "/Game/Environment/Weather/MPC_Weather.MPC_Weather" "Flash" 1.0)
+  (`KismetSystemLibrary.Delay` 0.2)
+  (`LightComponent.SetIntensity` (`self.LightningLight`) 0.0)
+  (`KismetMaterialLibrary.SetScalarParameterValue` "/Game/Environment/Weather/MPC_Weather.MPC_Weather" "Flash" 0.0)
+  (`KismetSystemLibrary.Delay` (`KismetMathLibrary.RandomFloatInRange` 0.6 2.5))
+  (`GameplayStatics.PlaySound2D` (select `int` (`KismetMathLibrary.RandomIntegerInRange` 0 2) :!type "SoundBase Object Reference" :`0` "/Game/Environment/Weather/S_Thunder_01.S_Thunder_01" :`1` "/Game/Environment/Weather/S_Thunder_02.S_Thunder_02" :`2` "/Game/Environment/Weather/S_Thunder_03.S_Thunder_03") (`KismetMathLibrary.RandomFloatInRange` 0.6 1.0) (`KismetMathLibrary.RandomFloatInRange` 0.85 1.1))
+  (`KismetSystemLibrary.Delay` (`KismetMathLibrary.RandomFloatInRange` 7.0 18.0))
+  (`self.Strike`))

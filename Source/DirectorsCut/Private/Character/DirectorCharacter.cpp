@@ -1,4 +1,4 @@
-#include "Character/DirectorCharacter.h"
+﻿#include "Character/DirectorCharacter.h"
 
 #include "Character/GuardCharacter.h"
 
@@ -57,6 +57,7 @@ namespace DirectorConstants
 }
 
 ADirectorCharacter::ADirectorCharacter()
+	: bUsesDirectorPresentation{false}
 {
 	PrimaryActorTick.bCanEverTick = true;
 	bUseControllerRotationYaw = false;
@@ -130,12 +131,21 @@ ADirectorCharacter::ADirectorCharacter()
 	TommyGun->SetupAttachment(GetCapsuleComponent());
 	TommyGun->SetRelativeLocation(FVector{40.0f, 30.0f, 28.0f});
 	TommyGun->SetRelativeScale3D(FVector{1.5f});
+	CreatePresentationComponents();
 }
 
 void ADirectorCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	ApplyTuning();
+	bUsesDirectorPresentation = DirectorMesh && StandingAnimation
+		&& CrouchAnimation;
+	if (bUsesDirectorPresentation)
+	{
+		GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+		GetMesh()->SetSkeletalMesh(DirectorMesh);
+		UpdateDirectorAnimation();
+	}
 	GrappleTether->SetBeamThickness(
 		DirectorConstants::TetherThickness);
 	GrappleTether->SetBeamColor(FLinearColor{0.9f, 0.8f, 0.5f});
@@ -162,6 +172,7 @@ void ADirectorCharacter::ApplyTuning()
 void ADirectorCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdateDirectorAnimation();
 	UpdateGrappleTether();
 }
 
@@ -172,7 +183,9 @@ void ADirectorCharacter::UpdateGrappleTether()
 		GrappleTether->HideBeam();
 		return;
 	}
-	GrappleTether->ShowBeamBetween(GetActorLocation(),
+	const FVector TetherStart{FilmReel->bHiddenInGame
+		? GetActorLocation() : FilmReel->GetComponentLocation()};
+	GrappleTether->ShowBeamBetween(TetherStart,
 		Grapple->GetGrappleDestination());
 }
 
@@ -376,6 +389,7 @@ void ADirectorCharacter::HandleInteractPressed()
 	if (Grapple->TryStartGrapple())
 	{
 		Locomotion->CancelSlide();
+		StartGesture(GrappleAnimation, FilmReel, ReelAnimation, 1.0f);
 	}
 }
 
@@ -389,6 +403,7 @@ void ADirectorCharacter::HandleGrappleReachedGuard(
 	const FVector GuardLocation{Guard.GetActorLocation()};
 	Guard.ReceiveTakedown();
 	Takedown->PlayCutFeedback(GuardLocation);
+	PlayClapboard(false);
 }
 
 void ADirectorCharacter::HandleFirePressed()
@@ -475,20 +490,29 @@ void ADirectorCharacter::HideFlashLight()
 
 void ADirectorCharacter::HandleTakedownPressed()
 {
-	if (Takedown->FindTakedownOpportunity().Guard.IsValid())
+	const FTakedownOpportunity Opportunity{Takedown->FindTakedownOpportunity()};
+	const bool bAlreadyStruggling{Takedown->IsStruggling()};
+	if (Opportunity.Guard.IsValid())
 	{
 		Locomotion->CancelSlide();
 		TommyGun->StopFiring();
 	}
 	Takedown->TryTakedown();
+	if (Opportunity.Guard.IsValid() && !bAlreadyStruggling)
+	{
+		PlayClapboard(Takedown->IsStruggling());
+	}
 }
 
 void ADirectorCharacter::OnStartCrouch(float HalfHeightAdjust,
 	float ScaledHalfHeightAdjust)
 {
 	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
-	GetMesh()->SetRelativeScale3D(FVector{1.0f, 1.0f,
-		DirectorConstants::CrouchedMeshHeightScale});
+	if (!bUsesDirectorPresentation)
+	{
+		GetMesh()->SetRelativeScale3D(FVector{1.0f, 1.0f,
+			DirectorConstants::CrouchedMeshHeightScale});
+	}
 }
 
 void ADirectorCharacter::OnEndCrouch(float HalfHeightAdjust,
@@ -537,6 +561,7 @@ void ADirectorCharacter::RespawnAt(
 	Locomotion->CancelSlide();
 	TommyGun->StopFiring();
 	Grapple->CancelGrapple();
+	ResetGesture();
 	UnCrouch();
 	GetCharacterMovement()->StopMovementImmediately();
 	SetActorLocation(RespawnTransform.GetLocation(), false,

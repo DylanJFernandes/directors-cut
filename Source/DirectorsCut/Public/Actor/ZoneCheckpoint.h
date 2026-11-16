@@ -6,9 +6,9 @@
 
 class UBoxComponent;
 
-/* A trigger at the start of a zone. Walking through it names
-   the zone on the HUD and makes this spot the place the
-   director restarts from when caught. */
+/* A trigger at the start of a zone, placed in the level.
+   Walking through it names the zone on the HUD and makes this
+   spot the place the director restarts from when caught. */
 UCLASS()
 class AZoneCheckpoint : public AActor
 {
@@ -18,18 +18,14 @@ public:
 	/* Creates the trigger box */
 	AZoneCheckpoint();
 
-	/* Sets the zone this checkpoint starts and its trigger size */
-	void Configure(const FString& InZoneName,
-		const FVector& TriggerExtent);
-
-	/* Makes the HUD list the controls while in this zone */
-	void EnableControlsHelp();
-
 	/* Returns the name of the zone this checkpoint starts */
 	const FString& GetZoneName() const;
 
 	/* Returns whether the HUD lists the controls in this zone */
 	bool ShowsControlsHelp() const;
+
+	/* Returns whether the run begins at this checkpoint */
+	bool StartsRun() const;
 
 private:
 	/* Activates this checkpoint when the director enters it */
@@ -45,8 +41,14 @@ private:
 	TObjectPtr<UBoxComponent> TriggerBox;
 
 	/* Name of the zone this checkpoint starts */
+	UPROPERTY(EditAnywhere, Category = "Custom|Checkpoint")
 	FString ZoneName;
 
 	/* Whether the HUD lists the controls in this zone */
+	UPROPERTY(EditAnywhere, Category = "Custom|Checkpoint")
 	bool bShowsControlsHelp;
+
+	/* Whether the run begins at this checkpoint */
+	UPROPERTY(EditAnywhere, Category = "Custom|Checkpoint")
+	bool bStartsRun;
 };

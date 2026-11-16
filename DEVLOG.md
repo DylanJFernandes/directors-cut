@@ -389,3 +389,237 @@ Dylan played the build and sent ten changes. All are in on
 - The finale past the first wave.
 - How the sounds actually sound; they were generated blind.
 - The code reviewer and judge agents were not run.
+## November 15, 2026 — The Moxy exterior
+
+Imported the theater as `/Game/Environment/Moxy/SM_Moxy`. Drag it from
+**Content > Environment > Moxy** into a level at scale 1. The pivot is at
+ground level and the mesh measures about 13.08 m wide, 9.58 m deep, and
+6.93 m high. The import has Nanite enabled and six simple collision hulls.
+
+The material instances in the `Materials` subfolder handle surface tint,
+grain, and marquee emission. The Blender preview used separate light actors,
+so the marquee and bulbs use emissive materials in Unreal and their
+surroundings take their lighting from the level.
+
+The reimport FBX and grain texture live under `SourceArt/Environment/Moxy`.
+Keep the FBX material slot names when replacing the source so Unreal can
+match the assigned material instances.
+
+## November 15, 2026 — 1940s backlot environment kit
+
+Built and imported 87 static meshes under `/Game/Environment/BacklotKit`.
+The Blender catalog and individual reimport FBXs are in
+`SourceArt/Environment/BacklotKit`. The catalog groups meshes by the same
+categories as the Content Browser. The kit shares one Unreal master material
+with editable tint, grain, metalness, roughness, and emissive parameters.
+
+The concept pieces include the barber shop, corner diner, Rusty Rabbit,
+Metropolis Tower, airship, elevated station, street subway entrance,
+Art Deco wall, arched window wall, and alley utility wall. The modular sets
+cover architecture, transit, scaffolding, fire escapes, bridges, signage,
+lighting fixtures, rooftop utility equipment, pavement, gates, street
+props, and parked vehicles. The blank marquee has room for an Unreal Text
+Render actor. The fixed guide and sliding section are separate meshes for
+rigging a drop ladder.
+
+### Placement
+
+- Use scale 1 and snap to 100 cm for the main wall widths. Architecture modules
+  use 100, 200, 400, and 600 cm spans. Track and platform segments repeat every
+  800 cm along their local Y axis. Square storefront infills are 100 and 200 cm.
+- Place `Transit/SM_SubwayStreetExit` at sidewalk height. At zero rotation, clear
+  the sidewalk and its collision roughly 390 cm wide from local Y = 0 to
+  Y = -800 cm. Add `SM_SubwayEntryLanding_4m` at offset `(0, -1000, -324)` cm
+  with matching rotation, then extend with concourse, platform, or tunnel
+  segments. The two stair lanes straddle the center handrail.
+- To connect the fire escape, center `SM_FireEscapeStair_4m` at offset
+  `(0, 138, -302)` cm relative to `SM_FireEscapePlatform_4m` at zero rotation.
+  The upper tread meets the opening in the platform rail.
+- The elevated station rear opening lines up with `SM_ElPlatform_8m` at
+  offset `(0, -800, 545)` cm. Use level light actors where the emissive
+  fixtures should cast stronger light.
+
+Validated the saved mesh paths, bounds, material bindings, Nanite flags,
+and custom hull counts in Unreal. Checked the source stair and landing
+collision for 42 cm radius and 200 cm standing clearance in both lanes.
+Map-level playtesting can be done after placing the kit.
+
+### Street dressing additions
+
+Added a park bench, cast-iron bollard, utility pole, street signpost,
+1 × 4 m sidewalk infill, 2 × 2 m curb corner, and 8 × 8 m cobblestone junction
+to `/Game/Environment/BacklotKit/Street`. The Blender source is
+`SourceArt/Environment/BacklotKit/StreetExtras.blend` and the seven FBXs
+are in the adjacent `Street` folder. These parts share the kit materials.
+
+## November 15, 2026 — Kit blocks and night-noir lighting
+
+Replaced the last CubeGrid building masses in `LVL_NewYorkSet` with kit-built
+blocks under `Backlot/04_BuildingRows/Blocks`. Each block gets alley walls,
+window storeys, Art Deco corner columns, cornices, parapets, fire-escape
+stacks, a roof deck, and rooftop water towers and vents. Heights match the
+street facades already built. The blocks add about 71k HISM instances. A kit
+cobble ground (`Backlot/03_Streets/BaseGround`) now runs under the alleys.
+All CubeGrid and generated-stair actors are deleted, and so are the
+`/Game/Maps/_GENERATED` meshes, so no blockout geometry is left in the map.
+
+Lighting is now a black-and-white night grade based on the inspiration
+references. The setup has a low moon, dense volumetric height fog with a faint
+ambient glow, and an unbound `PPV_NoirGrade` that zeroes saturation and adds
+contrast, film grain, vignette and bloom at a fixed exposure (EV100 0.3). Streets and
+sidewalks use wet copies of the concrete, limestone and mortar materials for
+reflections. `M_Backlot_NightWindow` lights a random share of window and
+storefront modules through PerInstanceRandom. Its instances,
+`MI_Backlot_NightWindow` and `MI_Backlot_NightShopfront`, override only the
+Glass slot in this level. The pass added 386 practical point lights under
+`Backlot/09_Lighting`, placed at every streetlamp, neon sign, marquee and
+landmark storefront. The streetlamp and landmark lights cast shadows. The
+neon lights do not.
+
+Both passes can be re-run from `Saved/BacklotDress`. `blocks.build()` and
+`blocks.build_ground()` rebuild the geometry, and `noir.run()` reapplies the
+lighting.
+
+## November 15, 2026 — Director rig and prop animation
+
+Imported the supplied detective and restored its costume maps from the
+source archive. The meshes, materials, and animation sequences are under
+`/Game/Characters/Director`. The two locomotion blend spaces use forward
+and right input. They cover eight walking, running, and crouch-walking
+directions, plus standing and crouched idles. The archive's jump clips are
+also available, and the character uses the jump loop while falling.
+
+The reel has perforated film sections, a rotating spool, and extend and
+retract clips. The supplied clapboard is weighted to a hinge and has a fast
+slate clap and a longer wind-up and sweep. Each prop has a matching body
+clip and is attached to its animated grip bone. The existing input and
+gameplay rules are used for E grapple and F takedown. The sweep playback
+rate is tied to the existing alert takedown time so the closure lands
+near the end of the struggle.
+
+The editable rigs and FBXs are in `SourceArt/Characters/Director`. Open
+`DirectorActionPreview.blend` and scrub the labeled markers to view the paired
+actions. `DirectorCharacter.blend` and `DirectorProps.blend` are the individual
+authoring files.
+
+The Win64 Development target and editor Live Coding build succeeded.
+A clean Unreal commandlet reopened three skinned meshes, all 14 material
+assignments, all 36 clips, and both blend spaces. The actions were also
+reviewed on the paired Blender rigs. In-level timing and transitions still
+need a dedicated Play-in-Editor pass.
+
+### Director Play-in-Editor follow-up
+
+Corrected the animation-only FBX exports to store translations directly
+in centimeters and reimported all 36 clips. A clean Unreal process
+verified the saved translations, materials, and blend-space samples.
+
+Tested the native director in `Lvl_Backlot` with keyboard input. Walk
+and crouch-walk advanced the pawn, E reached a grapple hook and showed
+the reel, and F showed the clapboard for both the quick and slow branches.
+The slow branch also locked movement during the struggle.
+
+`LVL_NewYorkSet` currently overrides the game mode with
+`BP_ThirdPersonGameMode`, which spawns `BP_ThirdPersonCharacter`. Set that
+map's GameMode Override to native `BacklotGameMode` to use the director
+through the existing native pawn configuration.
+
+### Storm, neon signs and the subway fix
+
+The base ground had capped the subway stair well, so the player couldn't get up
+to the street. `blocks.build_ground()` now leaves a hole at `layout.EXIT_CUT`
+and fills the rest of that tile with strips. Capsule sweeps up both stair lanes
+are now clear.
+
+`BP_NoirWeather` (`/Game/Environment/Weather`) follows the player camera. It
+carries `NS_NoirRain`, a GPU rain system with velocity-aligned streaks that
+hides while the camera is underground, and a 2D rain loop. It also fires
+random lightning strikes. Each strike flickers a second directional light,
+which lights the facades and casts hard shadows. The strike also flashes one
+of three bolt sprites in the sky through `MPC_Weather.Flash`, then plays one
+of three thunder claps after a short delay. The moon keeps forward-shading
+priority so the fog doesn't white out during a flash. The rain loop, thunder
+and bolt textures are generated by
+`SourceArt/Environment/Weather/make_weather_assets.py`.
+
+Added 20 neon tube signs (`/Game/Environment/BacklotKit/Signage/Neon`),
+generated in Blender by `SourceArt/Environment/Signage/make_neon_signs.py`.
+The letters are swept tubes from Bahnschrift outlines on an ink backing
+board. `M_NeonTube` makes about a third of the signs stutter.
+`Saved/BacklotDress/neon.py` places 18 rooftop signs at 2.2× scale on
+scaffold frames and 26 double-sided blade signs on facades. Their glow lights
+come from `noir.practicals()`, which brings the total to 456 practical lights.
+
+## November 15, 2026 — Big-band music speakers
+
+Imported the supplied Nick Panek big-band track as a 44.1 kHz mono Sound
+Wave under `/Game/Audio/Music`. The reimport WAV is in `SourceArt/Audio/Music`.
+`BP_BigBandSpeaker` is an auto-playing Ambient Sound actor. It loops and pans
+from the position of each placed actor. `ATT_BigBandSpeaker` holds full
+volume within 250 cm and tapers to silence at 2250 cm. The actor starts
+with a 0.65 volume multiplier. A fresh editor commandlet verified the
+saved defaults and recompiled the Blueprint to check that the settings
+persist. Placement and the in-level listening pass are separate.
+
+### Director visual repair
+
+Re-exported the three skinned meshes in centimeters to match the corrected
+animation clips and synchronized the saved Skeleton reference poses. The
+old mesh bind poses had a 100× root scale, which collapsed the visible skin
+when applied to animations with a unit-scale root. Saved the skeletal-mesh
+usage flags on the character and prop materials and assigned the textured
+preview meshes to the Skeletons, animation sequences, and blend spaces.
+
+Enlarged the in-hand slate to about 43 cm wide and the reel to about 28 cm
+in diameter. Compensated the grip offsets for the larger props. Performed
+a normal editor-module rebuild and reopened the New York map. Checked all
+three posed actions in its rendered Play-in-Editor viewport and verified
+the saved reference poses and material flags in a fresh process.
+
+### Noir HUD
+
+Restyled the existing Canvas HUD in BacklotHUD.cpp and BacklotHUD.h.
+Health, takes, and tool cooldowns share a compact charcoal panel with
+brass rules, ivory text, and distinct keycaps. The zone title, controls,
+upload and struggle progress, and end screens use the same frame.
+The palette and layout dimensions live in BacklotHUDConstants.
+
+Rebuilt DirectorsCutEditor, reopened LVL_NewYorkSet, and checked the
+HUD in Play-in-Editor. Press G to see the megaphone row change from
+ready to recharging. The map had no native checkpoint or upload
+terminal instances during this check, so those displays and the end
+cards were reviewed in code.
+
+## November 15, 2026 — The climb: guards, cover, grapples and the rooftop finale
+
+`Saved/BacklotDress/gameplay.py` places the playable route in
+`LVL_NewYorkSet` under the `Backlot/10_Gameplay` folder. Rerun it with
+`gameplay.build()`, then rebuild navigation.
+
+- Street: 51 cover clusters (sedans, trucks, crate stacks, barriers)
+  staggered every 18 m from the subway exit to the podium. Each station
+  also gets a guard that sweeps across the street, walks a short beat or
+  patrols a loop. Three sentries guard the plaza.
+- Tower: two grapple lanes run up the front: podium wall, 16 m roof,
+  scaffold perch, 55 m roof, perch, 95 m roof. A zig-zag of six scaffold
+  perches climbs the 125 m shaft to the 220 m ring, with a guard on the
+  wide middle balcony. Another perch leads to the 248 m ring, then the
+  266 m roof. 23 hooks in all. Every hop is 14–22 m, inside the 25 m
+  grapple range. Line traces confirmed line of sight to each hook and a
+  deck or roof under each landing. Shaft hooks sit just past the inner edge
+  of their deck, so the deck never blocks the view from below.
+- Each setback has two or three patrolling guards and vents, chimneys or
+  crates to hide behind (33 placed guards in total).
+- Roof: the upload terminal, the tommy gun pickup, a water tower and cover.
+  Wave guards spawn at four roof corners, and each corner has a navmesh path
+  to the terminal.
+- Ten checkpoints: Subway Exit (run start), West Approach, The Crossing,
+  Tower Avenue, The Podium, First Setback, Second Setback, The Spire,
+  The Crown, The Roof.
+
+Checked in PIE: all six shaft grapples and the hops to the 248 m and
+266 m roofs. The upload started with E and progressed while wave guards
+fired. With the upload shortened to 5 s for the test, "That's a wrap!"
+appeared with [R] Restart. All 42 guard patrol legs have complete navmesh
+paths. The first test found the 248 m perch blocked from the narrow ring
+below, so it was moved sideways.

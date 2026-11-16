@@ -1,11 +1,16 @@
 #include "Game/BacklotGameState.h"
 
+#include "Data/BacklotTuningSettings.h"
+
 ABacklotGameState::ABacklotGameState()
 	: bIsControlsHelpVisible{false},
 	  UploadProgress{0.0f},
 	  bIsUploadActive{false},
 	  bIsUploadPaused{false},
 	  bIsGameWon{false},
+	  TakesRemaining{
+		  UBacklotTuningSettings::Get().PlayerTakeCount},
+	  bIsGameLost{false},
 	  bDrawDebugVisionCones{true}
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -82,6 +87,32 @@ void ABacklotGameState::MarkGameWon()
 bool ABacklotGameState::IsGameWon() const
 {
 	return bIsGameWon;
+}
+
+bool ABacklotGameState::UseTake()
+{
+	TakesRemaining = FMath::Max(TakesRemaining - 1, 0);
+	return TakesRemaining > 0;
+}
+
+int32 ABacklotGameState::GetTakesRemaining() const
+{
+	return TakesRemaining;
+}
+
+void ABacklotGameState::MarkGameLost()
+{
+	bIsGameLost = true;
+}
+
+bool ABacklotGameState::IsGameLost() const
+{
+	return bIsGameLost;
+}
+
+bool ABacklotGameState::IsGameOver() const
+{
+	return bIsGameWon || bIsGameLost;
 }
 
 void ABacklotGameState::ToggleDebugVisionCones()

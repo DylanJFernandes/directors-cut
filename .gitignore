@@ -11,3 +11,14 @@ Build/
 *.VC.opendb
 *.DotSettings.user
 .mcp.json
+.codex/
+.claude/
+__pycache__/
+
+# Purchased 'Detective Noir' model (CGTrader Royalty Free License): not redistributable as source
+Content/Characters/Director/Actions/
+Content/Characters/Director/Character/
+Content/Characters/Director/Locomotion/
+Content/Characters/Director/Materials/
+SourceArt/Characters/Director/*
+!SourceArt/Characters/Director/Props/

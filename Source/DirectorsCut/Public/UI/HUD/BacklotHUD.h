@@ -26,7 +26,7 @@ struct FWorldPopup
 
 /* The whole HUD, drawn on the canvas: health, tool cooldowns,
    zone name, upload bar, guard detection meters, the grapple
-   target marker, prompts, popups and the win screen. */
+   target marker, prompts, popups and the end screens. */
 UCLASS()
 class ABacklotHUD : public AHUD
 {
@@ -78,6 +78,9 @@ private:
 	/* Draws the health pips */
 	void DrawHealth(const ADirectorCharacter& Director);
 
+	/* Draws how many takes the director has left */
+	void DrawTakes(const ABacklotGameState& GameState);
+
 	/* Draws the cooldown bars of the flash, megaphone and
 	   grapple */
 	void DrawToolCooldowns(const ADirectorCharacter& Director);
@@ -85,6 +88,7 @@ private:
 	/* Draws one tool's name and cooldown bar in the given row
 	   of the top left corner */
 	void DrawToolCooldown(const FString& ToolName,
+		const FString& Key,
 		float CooldownFractionRemaining, int32 RowIndex);
 
 	/* Draws the progress of a slow takedown */
@@ -112,12 +116,24 @@ private:
 	void DrawCenterMessage();
 
 	/* Draws the win screen */
-	void DrawWinScreen();
+	void DrawWinScreen(const ABacklotGameState& GameState);
+
+	/* Draws the game over screen */
+	void DrawLoseScreen();
+
+	/* Darkens the screen and draws an end screen's title,
+	   texts and the restart prompt */
+	void DrawEndScreen(const FString& Title,
+		const FString& Subtitle, const FString& Detail,
+		const FLinearColor& TitleColor);
 
 	/* Draws the dot in the middle of the screen */
 	void DrawCrosshair();
 
 	// Drawing helpers
+	/* Draws a dark panel with stepped corners and brass rules */
+	void DrawDecoPanel(const FVector2D& Position, const FVector2D& Size);
+
 	/* Draws text with its top left corner at a position */
 	void DrawLabel(const FString& Text, const FVector2D& Position,
 		const FLinearColor& Color, float Scale);
